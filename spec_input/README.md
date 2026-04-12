@@ -1,0 +1,1 @@
+Load into Claude Code. Read PRODUCT_SPEC.md first.

@@ -1,0 +1,15 @@
+{
+  "primary": {
+    "venue": "Monarch Ocean Pub",
+    "time": "4-7 PM",
+    "grade": "A",
+    "decision": "GO",
+    "reason": "Strong for conversation"
+  },
+  "backup": {
+    "venue": "Belly Up Tavern",
+    "time": "8:00 PM",
+    "grade": "B",
+    "decision": "MAYBE"
+  }
+}

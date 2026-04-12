@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "Local Social",
+    "slug": "local-social",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "localsocial",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": { "supportsTablet": true },
+    "android": { "adaptiveIcon": { "backgroundColor": "#ffffff" } },
+    "plugins": ["expo-router"],
+    "experiments": { "typedRoutes": true }
+  }
+}

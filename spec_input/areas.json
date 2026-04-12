@@ -1,0 +1,14 @@
+{
+  "Del Mar": [
+    "Solana Beach",
+    "Encinitas"
+  ],
+  "Solana Beach": [
+    "Del Mar",
+    "Encinitas"
+  ],
+  "Encinitas": [
+    "Solana Beach",
+    "Carlsbad"
+  ]
+}

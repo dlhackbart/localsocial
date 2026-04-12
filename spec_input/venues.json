@@ -1,0 +1,65 @@
+[
+  {
+    "name": "Belly Up Tavern",
+    "area": "Solana Beach",
+    "repeatFriendly": false,
+    "conversationFriendly": false,
+    "energy": "high",
+    "events": [
+      {
+        "day": "Friday",
+        "type": "80s dance",
+        "time": "8:00 PM",
+        "broadAppeal": true
+      },
+      {
+        "day": "Saturday",
+        "type": "tribute",
+        "time": "8:00 PM",
+        "broadAppeal": true
+      }
+    ]
+  },
+  {
+    "name": "Monarch Ocean Pub",
+    "area": "Del Mar",
+    "repeatFriendly": true,
+    "conversationFriendly": true,
+    "energy": "medium",
+    "events": [
+      {
+        "day": "Wednesday",
+        "type": "acoustic",
+        "time": "4-7 PM",
+        "broadAppeal": true
+      },
+      {
+        "day": "Friday",
+        "type": "acoustic",
+        "time": "4-7 PM",
+        "broadAppeal": true
+      }
+    ]
+  },
+  {
+    "name": "Del Mar Plaza",
+    "area": "Del Mar",
+    "repeatFriendly": true,
+    "conversationFriendly": true,
+    "energy": "medium",
+    "events": [
+      {
+        "day": "Thursday",
+        "type": "seaside sessions",
+        "time": "5-7 PM",
+        "broadAppeal": true
+      },
+      {
+        "day": "Saturday",
+        "type": "seaside sessions",
+        "time": "5-7 PM",
+        "broadAppeal": true
+      }
+    ]
+  }
+]
