@@ -103,11 +103,26 @@ All state uses React Context + AsyncStorage. No Redux, no Zustand.
 
 12 event categories: `hiking_outdoor`, `classes_workshops`, `community_civic`, `live_music_small`, `art_galleries`, `food_drink`, `book_clubs`, `markets`, `theater_small`, `movies_indie`, `meetups_clubs`, `wellness`
 
+## Daily Social Plan & Notifications
+
+Three-touch daily cadence (previously run as ChatGPT scheduled tasks, needs native implementation):
+
+| Time | Purpose | Status |
+|------|---------|--------|
+| 8:00 AM | Morning Social Plan (tonight's picks) | NOT BUILT |
+| 4:00 PM | Go-Time reminder (final nudge) | NOT BUILT |
+| 9:30 PM | Nightly log prompt | UI DONE (Log tab), notification NOT BUILT |
+
+**Terminology:** Always "Social Plan", never "Dating Plan"
+**Empty days:** Say "No events today." — don't force weak recs
+**Format:** Primary + Backup option, venue notes, Call (GO/MAYBE/SKIP), Crowd Grade (A/B/C), Priority Level (High/Medium/Low)
+**Full specs:** `spec_input/chatgpt_handoff/` (NOTIFICATION_SPEC.md, DAILY_PLAN_TEMPLATE.md, LOGGING_SPEC.md, AUTOMATION_NOTES.md)
+
 ## Current Status
 
 **MVP complete.** All screens functional, scoring engine working, iCal pipeline wired, subscription gating in place (mock payments).
 
-**Not implemented:** Real auth, real payments, push notifications, maps, chat, matching, multi-city.
+**Not implemented:** Daily Social Plan notifications (was running in ChatGPT), real auth, real payments, push notifications, maps, chat, matching, multi-city.
 
 ## Conventions
 

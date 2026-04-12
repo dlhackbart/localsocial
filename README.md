@@ -294,6 +294,88 @@ Spacing: `xs=4, sm=8, md=16, lg=24, xl=32`. Border radius: `md=12, lg=16`.
 | Backend | Supabase (Postgres + Edge Functions on Deno) |
 | Styling | React Native StyleSheet (no external UI library) |
 
+## Daily Social Plan & Notifications
+
+The app is designed around a three-touch daily notification cadence. These were previously run as ChatGPT scheduled automations and need to be implemented natively.
+
+**Full specs:** `spec_input/chatgpt_handoff/NOTIFICATION_SPEC.md`, `DAILY_PLAN_TEMPLATE.md`, `LOGGING_SPEC.md`
+
+### Schedule
+
+| Time | Name | Purpose |
+|------|------|---------|
+| **8:00 AM** | Morning Social Plan | Early awareness — factor tonight's plan into the day |
+| **4:00 PM** | Go-Time Reminder | Final nudge / decision support |
+| **9:30 PM** | Nightly Log Prompt | Quick check-in: did you go out? Crowd grade? Go back? |
+
+### Daily Social Plan Format
+
+Always use **"Social Plan"** terminology (never "Dating Plan"). Output must be:
+- Concise, practical, action-oriented, calm, adult tone
+- Readable in under 15 seconds
+- Day-accurate (don't reuse yesterday's logic)
+
+**When events exist:**
+```
+TODAY: Thursday — Del Mar / Solana Beach Social Plan
+
+Primary Option:
+Monarch Ocean Pub — 4:00-7:00 PM
+- Live music: acoustic set
+- Crowd: conversational, repeat-friendly
+
+Backup Option:
+Belly Up Tavern — 8:00 PM
+- Live music: 80s dance night
+- Crowd: higher energy, broader social mix
+
+Del Mar Plaza:
+- No Seaside Sessions tonight
+
+Call: GO
+Crowd Grade: A
+Priority Level: High
+
+Note:
+Warm weather should support good turnout and easy patio flow.
+```
+
+**When nothing is strong:**
+```
+TODAY: Monday — Del Mar Social Plan
+
+No events today.
+No strong nearby social options matched today.
+```
+
+### Weekly Base Rhythm
+
+| Day | Primary | Notes |
+|-----|---------|-------|
+| **Thursday** | Del Mar Plaza Seaside Sessions 5-7 PM | Top priority recurring night |
+| **Saturday** | Del Mar Plaza Seaside Sessions 5-7 PM | Strong repeat option |
+| **Wednesday** | Monarch ~3-7 PM | Rotation / repeat-friendly |
+| **Friday** | Monarch ~3-7 PM | Rotation / repeat-friendly |
+| **Sunday** | Monarch ~3-6 PM + optional Cedros | Social add option |
+| **Mon/Tue** | Usually "No events today." | Unless special event |
+| **Belly Up** | Lineup-dependent | Only when the show materially improves the night |
+
+### Nightly Logging (9:30 PM)
+
+The Log tab already implements this spec. The notification should prompt:
+1. "Did you go out tonight?"
+2. If yes: which venue, crowd grade (A/B/C), would go back (yes/maybe/no)
+
+Log data will later support venue rotation awareness, stronger recommendations, and better prioritization of repeat-friendly venues.
+
+### Implementation Status
+
+- **Logging UI** — DONE (Log tab matches LOGGING_SPEC.md exactly)
+- **Scoring engine** — DONE (generates the GO/MAYBE/SKIP, grades, reasons)
+- **Daily Plan generation** — NOT YET BUILT (need to format scoring output into Social Plan template)
+- **Notification delivery** — NOT YET BUILT (options: Expo push notifications, SMS via scheduled script, or server-driven)
+- **Weather/turnout notes** — NOT YET BUILT
+
 ## Not in MVP
 
 These are explicitly out of scope for the current version:
@@ -304,16 +386,15 @@ These are explicitly out of scope for the current version:
 - **User matching** — no dating algorithm or profile matching
 - **Maps integration** — no map view or directions
 - **Web scraping** — iCal feeds only, no HTML parsing
-- **Push notifications** — no alerts for new events
 - **Analytics** — no usage tracking or dashboards
 - **Multi-city expansion** — hardcoded to North County SD
 
 ## Roadmap
 
-1. **Authentication** — Supabase Auth (email/magic link) to replace device-ID
-2. **Payment processing** — Stripe or RevenueCat for paid plan subscription
-3. **Deploy Edge Function** — set `ANTHROPIC_API_KEY` for LLM-based source discovery
-4. **Venue data expansion** — crowd-source venues via user logs, expand beyond SD
-5. **App store submission** — Apple App Store + Google Play
-6. **Push notifications** — daily "Tonight's pick" notification
+1. **Daily Social Plan notifications** — Build the 8 AM / 4 PM / 9:30 PM notification pipeline (highest priority — was working via ChatGPT, now needs native implementation)
+2. **Authentication** — Supabase Auth (email/magic link) to replace device-ID
+3. **Payment processing** — Stripe or RevenueCat for paid plan subscription
+4. **Deploy Edge Function** — set `ANTHROPIC_API_KEY` for LLM-based source discovery
+5. **Venue data expansion** — crowd-source venues via user logs, expand beyond SD
+6. **App store submission** — Apple App Store + Google Play
 7. **Scoring refinements** — incorporate visit log feedback (crowd grade, would-go-again) into future scores
