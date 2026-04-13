@@ -80,23 +80,6 @@ VENUES = [
         ],
     },
     {
-        "name": "Cedros District", "area": "Solana Beach",
-        "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
-        "events": [
-            {"day": "Wednesday", "type": "walkable district", "time": "6-9 PM", "broadAppeal": True},
-            {"day": "Thursday", "type": "walkable district", "time": "6-9 PM", "broadAppeal": True},
-            {"day": "Friday", "type": "walkable district", "time": "6-9 PM", "broadAppeal": True},
-        ],
-    },
-    {
-        "name": "Pizza Port Solana", "area": "Solana Beach",
-        "repeatFriendly": True, "conversationFriendly": False, "energy": "high",
-        "events": [
-            {"day": "Friday", "type": "brewery crowd", "time": "6-10 PM", "broadAppeal": True},
-            {"day": "Saturday", "type": "brewery crowd", "time": "6-10 PM", "broadAppeal": True},
-        ],
-    },
-    {
         "name": "Union Kitchen & Tap", "area": "Encinitas",
         "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
         "events": [
