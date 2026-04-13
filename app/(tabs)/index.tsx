@@ -1,13 +1,13 @@
 import { Link } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useMemo } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { VENUES } from '../../src/data/venues';
 import { getSampleEvents } from '../../src/data/events';
-import { loadEvents } from '../../src/events/store';
 import { getRecommendations, todayName } from '../../src/scoring';
 import { usePreferences } from '../../src/store/preferences';
 import { useSubscription } from '../../src/store/subscription';
 import { colors, radius, spacing } from '../../src/theme';
-import { CATEGORIES, Decision, LocalEvent, Recommendation } from '../../src/types';
+import { CATEGORIES, Decision, Recommendation } from '../../src/types';
 
 const decisionColor: Record<Decision, string> = {
   GO: colors.go,
@@ -19,7 +19,7 @@ const CATEGORY_LABELS: Record<string, string> = Object.fromEntries(
   CATEGORIES.map((c) => [c.value, c.label]),
 );
 
-function Card({ rec, label, locked }: { rec: Recommendation; label: string; locked: boolean }) {
+function Card({ rec, label }: { rec: Recommendation; label: string }) {
   const tag =
     rec.kind === 'event' && rec.category
       ? CATEGORY_LABELS[rec.category] ?? 'Event'
@@ -31,127 +31,75 @@ function Card({ rec, label, locked }: { rec: Recommendation; label: string; lock
         <Text style={styles.cardLabel}>{label}</Text>
         <Text style={styles.pill}>{tag}</Text>
       </View>
-      <Text style={styles.venue}>{locked ? '•••••••••' : rec.title}</Text>
+      <Text style={styles.venue}>{rec.title}</Text>
       <Text style={styles.sub}>
         {rec.area} · {rec.time}
         {rec.sourceName ? ` · ${rec.sourceName}` : ''}
       </Text>
-      <Text style={styles.sub}>{locked ? 'details hidden' : rec.subtitle}</Text>
+      <Text style={styles.sub}>{rec.subtitle}</Text>
       <View style={styles.row}>
-        <View style={[styles.badge, { backgroundColor: locked ? colors.cardAlt : decisionColor[rec.decision] }]}>
-          <Text style={styles.badgeText}>{locked ? 'LOCKED' : `Decision: ${rec.decision}`}</Text>
+        <View style={[styles.badge, { backgroundColor: decisionColor[rec.decision] }]}>
+          <Text style={styles.badgeText}>{rec.decision}</Text>
         </View>
         <View style={[styles.badge, styles.gradeBadge]}>
-          <Text style={styles.badgeText}>{locked ? 'Grade hidden' : `Grade: ${rec.grade}`}</Text>
+          <Text style={styles.badgeText}>Grade {rec.grade}</Text>
         </View>
       </View>
-      <Text style={styles.reason}>{locked ? 'Unlock to see why.' : rec.reason}</Text>
+      <Text style={styles.reason}>{rec.reason}</Text>
     </View>
   );
 }
 
 export default function HomeScreen() {
   const { prefs, ready: prefsReady } = usePreferences();
-  const { state, ready: subReady, canReveal, revealedToday, reveal, nextResetLabel } = useSubscription();
-  const [events, setEvents] = useState<LocalEvent[]>([]);
-  const [eventsLoading, setEventsLoading] = useState(true);
+  const sub = useSubscription();
 
-  useEffect(() => {
-    if (!prefsReady) return;
-    setEventsLoading(true);
-    // Load sample events immediately — always available, no network needed.
-    // Live iCal events loaded in background and merged when ready.
-    const samples = getSampleEvents();
-    setEvents(samples);
-    setEventsLoading(false);
-
-    // Try live sources in background (non-blocking)
-    loadEvents(prefs.homeArea)
-      .then((liveEvents) => {
-        if (liveEvents.length > samples.length) {
-          setEvents(liveEvents);
-        }
-      })
-      .catch(() => {});
-  }, [prefsReady, prefs.homeArea]);
+  // Compute everything synchronously — no async, no network, no loading screen
+  const events = useMemo(() => getSampleEvents(), []);
 
   const result = useMemo(
-    () => getRecommendations(prefs, events),
-    [prefs, events],
+    () => prefsReady ? getRecommendations(prefs, events) : null,
+    [prefsReady, prefs, events],
   );
 
-  if (!prefsReady || !subReady || eventsLoading) {
+  if (!prefsReady || !sub.ready || !result) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color={colors.accent} />
-        <Text style={styles.loadingTitle}>One moment while we gather the data</Text>
-        <Text style={styles.loadingSub}>
-          First-time lookups for {prefs.homeArea} can take 5–15 seconds while we
-          find and validate local event feeds. Subsequent visits are instant.
-        </Text>
+        <Text style={styles.loadingTitle}>Loading...</Text>
       </View>
     );
   }
 
-  const unlocked = state.plan === 'paid' || revealedToday();
-  const canUnlock = canReveal();
+  const now = new Date();
+  const isLateNight = now.getHours() >= 22;
+  const dayLabel = isLateNight
+    ? `Tomorrow · ${todayName(new Date(Date.now() + 86400000))}`
+    : todayName();
+
   const anyPick = result.topVenue || result.topEvent;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.header}>
-        {new Date().getHours() >= 22
-          ? `Tomorrow · ${todayName(new Date(Date.now() + 86400000))}`
-          : todayName()}
-      </Text>
+      <Text style={styles.header}>{dayLabel}</Text>
       <Text style={styles.dim}>
-        {prefs.homeArea} · {prefs.enabledZones.length} nearby zones · {state.plan === 'paid' ? 'Paid plan' : 'Free plan'}
+        {prefs.homeArea} · {prefs.enabledZones.length} nearby zones
       </Text>
-      <Text style={styles.dim}>
-        {prefs.categories.length}/{CATEGORIES.length} categories on ·{' '}
-        {events.filter((e) => e.source === 'ical').length} live ·{' '}
-        {events.filter((e) => e.source === 'sample').length} sample
-      </Text>
-
 
       {anyPick ? (
         <>
-          {result.topEvent && (
-            <Card rec={result.topEvent} label="Top Event Tonight" locked={!unlocked} />
-          )}
           {result.topVenue && (
-            <Card rec={result.topVenue} label="Top Venue Tonight" locked={!unlocked} />
+            <Card rec={result.topVenue} label={isLateNight ? 'Top Venue Tomorrow' : 'Top Venue Tonight'} />
           )}
-          {unlocked && (
-            <Text style={styles.legend}>
-              Grade A = strong match tonight · B = decent · C = skip
-            </Text>
+          {result.topEvent && (
+            <Card rec={result.topEvent} label={isLateNight ? 'Top Event Tomorrow' : 'Top Event Tonight'} />
           )}
+          <Text style={styles.legend}>
+            Grade A = strong match · B = decent · C = skip
+          </Text>
         </>
       ) : (
         <View style={styles.card}>
           <Text style={styles.venue}>{result.emptyMessage ?? 'No matches today.'}</Text>
-        </View>
-      )}
-
-      {anyPick && !unlocked && (
-        <View style={styles.gate}>
-          {canUnlock ? (
-            <Pressable onPress={reveal} style={styles.unlockBtn}>
-              <Text style={styles.unlockText}>
-                Unlock tonight's picks ({state.plan === 'free' ? '1 of 1 this week' : 'daily'})
-              </Text>
-            </Pressable>
-          ) : (
-            <>
-              <Text style={styles.dim}>
-                You've used this week's free reveal. Resets {nextResetLabel()}.
-              </Text>
-              <Link href="/(tabs)/profile" style={styles.link}>
-                <Text style={styles.linkText}>Upgrade for daily picks →</Text>
-              </Link>
-            </>
-          )}
         </View>
       )}
 
@@ -169,18 +117,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.xl,
-    gap: spacing.md,
   },
   loadingTitle: {
     color: colors.text,
     fontSize: 18,
     fontWeight: '700',
-    textAlign: 'center',
-  },
-  loadingSub: {
-    color: colors.textDim,
-    textAlign: 'center',
-    lineHeight: 20,
   },
   header: { color: colors.text, fontSize: 28, fontWeight: '700' },
   dim: { color: colors.textDim },
@@ -211,32 +152,6 @@ const styles = StyleSheet.create({
   badgeText: { color: colors.text, fontWeight: '700' },
   reason: { color: colors.text, marginTop: spacing.sm, fontStyle: 'italic' },
   legend: { color: colors.textDim, fontSize: 12, textAlign: 'center' },
-  gate: {
-    backgroundColor: colors.cardAlt,
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  unlockBtn: {
-    backgroundColor: colors.accent,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radius.md,
-  },
-  unlockText: { color: '#fff', fontWeight: '700' },
   link: { marginTop: spacing.md, alignSelf: 'center' },
   linkText: { color: colors.accent, fontWeight: '600' },
-  cta: {
-    backgroundColor: colors.cardAlt,
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: spacing.sm,
-  },
-  ctaTitle: { color: colors.text, fontWeight: '700' },
-  ctaLink: { alignSelf: 'flex-start' },
 });
