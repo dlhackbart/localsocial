@@ -11,6 +11,13 @@ web-build/
 sb.exe
 supabase/.temp/
 
+# Python cache
+__pycache__/
+*.pyc
+
+# Notification log
+scripts/notify.log
+
 # Claude Code local settings
 .claude/
 
