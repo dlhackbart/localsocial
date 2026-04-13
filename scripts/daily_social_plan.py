@@ -149,7 +149,15 @@ VENUES = [
 
 # ─── Featured venues (always shown in plan when they have events) ────────────
 
-FEATURED_VENUES = ["Belly Up Tavern", "Monarch Ocean Pub", "Del Mar Plaza"]
+# Monarch Ocean Pub is inside Del Mar Plaza — same physical location.
+# Show as one featured entry under "Del Mar Plaza / Monarch".
+FEATURED_VENUES = ["Belly Up Tavern", "Del Mar Plaza / Monarch"]
+
+# Map for featured venue lookups (check both names)
+FEATURED_VENUE_LOOKUPS = {
+    "Del Mar Plaza / Monarch": ["Monarch Ocean Pub", "Del Mar Plaza"],
+    "Belly Up Tavern": ["Belly Up Tavern"],
+}
 
 # ─── Priority map (weekly rhythm from NOTIFICATION_SPEC) ─────────────────────
 
@@ -292,13 +300,18 @@ def generate_plan(today=None, home_area=None, zones=None):
     # Featured venue notes (always included)
     featured_notes = {}
     for fname in FEATURED_VENUES:
-        venue_data = next((v for v in VENUES if v["name"] == fname), None)
-        if not venue_data:
-            continue
-        day_events = [e for e in venue_data["events"] if e["day"] == day_name]
-        if day_events:
-            ev = day_events[0]
-            featured_notes[fname] = f"{ev['type']} — {ev['time']}"
+        lookup_names = FEATURED_VENUE_LOOKUPS.get(fname, [fname])
+        notes = []
+        for lname in lookup_names:
+            venue_data = next((v for v in VENUES if v["name"] == lname), None)
+            if not venue_data:
+                continue
+            day_events = [e for e in venue_data["events"] if e["day"] == day_name]
+            if day_events:
+                ev = day_events[0]
+                notes.append(f"{ev['type']} — {ev['time']}")
+        if notes:
+            featured_notes[fname] = " + ".join(notes)
         else:
             featured_notes[fname] = "No events tonight"
 
@@ -375,14 +388,22 @@ def generate_plan(today=None, home_area=None, zones=None):
     all_candidates = candidates + scraped_candidates
     all_candidates.sort(key=lambda x: x["score"], reverse=True)
 
-    # Dedupe by venue name (keep highest-scored entry per venue)
-    seen_venues = set()
+    # Venues that are the same physical location (dedupe together)
+    SAME_LOCATION = {
+        "monarch ocean pub": "del mar plaza",
+        "del mar plaza": "del mar plaza",
+        "del mar plaza (ocean view deck)": "del mar plaza",
+    }
+
+    # Dedupe by physical location (keep highest-scored entry per location)
+    seen_locations = set()
     deduped = []
     for c in all_candidates:
         vkey = c["venue"].lower()
-        if vkey in seen_venues:
+        location_key = SAME_LOCATION.get(vkey, vkey)
+        if location_key in seen_locations:
             continue
-        seen_venues.add(vkey)
+        seen_locations.add(location_key)
         deduped.append(c)
 
     # Top 5 picks (or fewer if not enough candidates)
@@ -510,19 +531,124 @@ def format_sms(plan):
     return msg[:160]
 
 
+def generate_weekly_plan(start_date=None, home_area=None, zones=None):
+    """Generate plans for 7 days starting from start_date."""
+    if start_date is None:
+        start_date = date.today()
+    from datetime import timedelta
+    plans = []
+    for offset in range(7):
+        day = start_date + timedelta(days=offset)
+        plan = generate_plan(today=day, home_area=home_area, zones=zones)
+        plans.append(plan)
+    return plans
+
+
+def _format_day_picks(plan, is_today=False):
+    """Format picks for a single day. Used by both tonight and upcoming days."""
+    lines = []
+
+    if is_today:
+        header = f"TONIGHT: {plan['day_name']} — {plan['area_str']}"
+    else:
+        # Show date for upcoming days
+        header = f"{plan['day_name'].upper()} {plan['date'][5:]}"  # e.g. "FRIDAY 04/18"
+
+    priority_tag = f"  [{plan['priority']} priority]" if plan["priority"] != "Low" else ""
+    lines.append(f"{header}{priority_tag}")
+
+    if not plan["has_events"]:
+        lines.append("  No events.")
+        lines.append("")
+        return lines
+
+    picks = plan["picks"]
+    for i, pick in enumerate(picks):
+        num = i + 1
+        big = " ***" if pick.get("big_event") else ""
+        lines.append(f"  {num}. {pick['venue']} — {pick['time']}{big}")
+        lines.append(f"     {pick['event_type']}")
+        lines.append(f"     {_crowd_desc(pick)}  |  Grade {pick['grade']}  |  {pick['decision']}")
+
+    # Featured venue notes (only if not in picks)
+    pick_venues = {p["venue"] for p in picks}
+    for fname, note in plan["featured_notes"].items():
+        if fname not in pick_venues and "no events" not in note.lower():
+            lines.append(f"  {fname}: {note}")
+
+    lines.append("")
+    return lines
+
+
+def format_weekly_plan(plans):
+    """Format the full 7-day Social Plan (for email)."""
+    lines = []
+
+    today_plan = plans[0]
+    lines.append(f"WEEKLY SOCIAL PLAN — {today_plan['area_str']}")
+    lines.append(f"Generated {today_plan['date']}")
+    lines.append("=" * 50)
+    lines.append("")
+
+    # Tonight — full detail with reasons
+    lines.append(f"TONIGHT: {today_plan['day_name']}")
+    lines.append("-" * 40)
+
+    if not today_plan["has_events"]:
+        lines.append("No events today.")
+        lines.append("")
+    else:
+        picks = today_plan["picks"]
+        labels = ["#1 Top Pick", "#2", "#3", "#4", "#5"]
+        for i, pick in enumerate(picks):
+            label = labels[i] if i < len(labels) else f"#{i+1}"
+            big = "  *** BIG EVENT ***" if pick.get("big_event") else ""
+            lines.append(f"{label}: {pick['venue']} — {pick['time']}{big}")
+            lines.append(f"  {pick['event_type']}")
+            lines.append(f"  Crowd: {_crowd_desc(pick)}  |  Grade {pick['grade']}  |  {pick['decision']}")
+            lines.append(f"  {pick['reason']}")
+            lines.append("")
+
+        # Featured venue notes
+        pick_venues = {p["venue"] for p in picks}
+        for fname, note in today_plan["featured_notes"].items():
+            if fname not in pick_venues:
+                lines.append(f"{fname}: {note}")
+        lines.append("")
+
+        lines.append(f"Call: {today_plan['call']}  |  Grade: {today_plan['crowd_grade']}  |  Priority: {today_plan['priority']}")
+        lines.append("")
+
+    # Upcoming 6 days — compact format
+    lines.append("=" * 50)
+    lines.append("COMING UP")
+    lines.append("=" * 50)
+    lines.append("")
+
+    for plan in plans[1:]:
+        lines.extend(_format_day_picks(plan, is_today=False))
+
+    return "\n".join(lines)
+
+
 def format_log_prompt():
     """Format the 9:30 PM logging prompt SMS."""
     return "Did you go out tonight? Reply with venue name + crowd grade (A/B/C) + would go again (yes/maybe/no)"
 
 
 if __name__ == "__main__":
-    plan = generate_plan()
-
-    if "--json" in sys.argv:
-        # Remove non-serializable bits
+    if "--week" in sys.argv or "--weekly" in sys.argv:
+        plans = generate_weekly_plan()
+        print(format_weekly_plan(plans))
+        print()
+        print("--- SMS (tonight only) ---")
+        print(format_sms(plans[0]))
+    elif "--json" in sys.argv:
+        plan = generate_plan()
         output = {k: v for k, v in plan.items() if k != "all_candidates"}
         print(json.dumps(output, indent=2))
     else:
+        plan = generate_plan()
         print(format_full_plan(plan))
         print()
         print("--- SMS ---")

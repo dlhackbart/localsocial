@@ -24,7 +24,10 @@ from notify_config import (
     EMAIL_FROM, EMAIL_TO, SMS_TO,
     SMTP_PASSWORD, SMTP_PORT, SMTP_SERVER, SMTP_USER,
 )
-from daily_social_plan import format_full_plan, format_log_prompt, format_sms, generate_plan
+from daily_social_plan import (
+    format_full_plan, format_log_prompt, format_sms, format_weekly_plan,
+    generate_plan, generate_weekly_plan,
+)
 
 
 def send_sms(message: str, dry_run: bool = False) -> bool:
@@ -90,27 +93,31 @@ def send_email(subject: str, body: str, dry_run: bool = False) -> bool:
 
 
 def morning(dry_run: bool = False):
-    """8 AM — Morning Social Plan."""
-    plan = generate_plan()
-    full_text = format_full_plan(plan)
-    sms_text = format_sms(plan)
+    """8 AM — Morning Social Plan (full week in email, tonight in SMS)."""
+    plans = generate_weekly_plan()
+    today_plan = plans[0]
 
-    subject = f"Tonight: {plan['day_name']} Social Plan — {plan['call']}"
-    if not plan["has_events"]:
-        subject = f"Tonight: {plan['day_name']} — No events today"
+    # SMS: tonight only (160 chars)
+    sms_text = format_sms(today_plan)
+
+    # Email: full 7-day plan
+    weekly_text = format_weekly_plan(plans)
+
+    subject = f"Weekly Social Plan: {today_plan['day_name']} — {today_plan['call']}"
+    if not today_plan["has_events"]:
+        subject = f"Weekly Social Plan: {today_plan['day_name']} — No events tonight"
 
     send_sms(sms_text, dry_run=dry_run)
-    send_email(subject, full_text, dry_run=dry_run)
+    send_email(subject, weekly_text, dry_run=dry_run)
 
 
 def gotime(dry_run: bool = False):
-    """4 PM — Go-time reminder."""
+    """4 PM — Go-time reminder (tonight only, no week view)."""
     plan = generate_plan()
     full_text = format_full_plan(plan)
     sms_text = format_sms(plan)
 
     if not plan["has_events"]:
-        # Still send a short "nothing tonight" nudge
         send_sms(f"{plan['day_name']}: No events tonight. Stay in.", dry_run=dry_run)
         return
 
