@@ -348,14 +348,24 @@ def generate_plan(today=None, home_area=None, zones=None):
     all_candidates = candidates + scraped_candidates
     all_candidates.sort(key=lambda x: x["score"], reverse=True)
 
-    # Build result
-    primary = all_candidates[0] if len(all_candidates) > 0 else None
-    backup = all_candidates[1] if len(all_candidates) > 1 else None
+    # Dedupe by venue name (keep highest-scored entry per venue)
+    seen_venues = set()
+    deduped = []
+    for c in all_candidates:
+        vkey = c["venue"].lower()
+        if vkey in seen_venues:
+            continue
+        seen_venues.add(vkey)
+        deduped.append(c)
 
-    # Overall call: use primary's decision, or SKIP if nothing
-    if primary and primary["decision"] == "GO":
+    # Top 5 picks (or fewer if not enough candidates)
+    MAX_PICKS = 5
+    picks = deduped[:MAX_PICKS]
+
+    # Overall call: use #1 pick's decision, or SKIP if nothing
+    if picks and picks[0]["decision"] == "GO":
         call = "GO"
-    elif primary and primary["decision"] == "MAYBE":
+    elif picks and picks[0]["decision"] == "MAYBE":
         call = "MAYBE"
     else:
         call = "SKIP"
@@ -364,7 +374,7 @@ def generate_plan(today=None, home_area=None, zones=None):
     if any(c.get("big_event") for c in all_candidates):
         priority = "High"
 
-    crowd_grade = primary["grade"] if primary else "C"
+    crowd_grade = picks[0]["grade"] if picks else "C"
 
     return {
         "date": today.isoformat(),
@@ -372,15 +382,28 @@ def generate_plan(today=None, home_area=None, zones=None):
         "area_str": area_str,
         "home_area": home_area,
         "priority": priority,
-        "has_events": primary is not None,
-        "primary": primary,
-        "backup": backup,
+        "has_events": len(picks) > 0,
+        "picks": picks,
         "featured_notes": featured_notes,
         "call": call,
         "crowd_grade": crowd_grade,
         "all_candidates": all_candidates,
         "scraped_count": len(scraped_for_area),
     }
+
+
+def _crowd_desc(pick):
+    """Build a short crowd description string."""
+    parts = []
+    if pick.get("conversationFriendly"):
+        parts.append("conversational")
+    if pick.get("repeatFriendly"):
+        parts.append("repeat-friendly")
+    if pick.get("energy") == "high":
+        parts.append("high energy")
+    elif pick.get("energy") == "medium":
+        parts.append("relaxed vibe")
+    return ", ".join(parts) if parts else "standard"
 
 
 def format_full_plan(plan):
@@ -394,64 +417,47 @@ def format_full_plan(plan):
         lines.append("No strong nearby social options matched today.")
         return "\n".join(lines)
 
-    # Primary
-    p = plan["primary"]
-    lines.append("Primary Option:")
-    lines.append(f"{p['venue']} — {p['time']}")
-    lines.append(f"- Event: {p['event_type']}")
-    crowd_desc = []
-    if p["conversationFriendly"]:
-        crowd_desc.append("conversational")
-    if p["repeatFriendly"]:
-        crowd_desc.append("repeat-friendly")
-    if p["energy"] == "high":
-        crowd_desc.append("high energy")
-    elif p["energy"] == "medium":
-        crowd_desc.append("relaxed vibe")
-    lines.append(f"- Crowd: {', '.join(crowd_desc) if crowd_desc else 'standard'}")
-    lines.append("")
+    # Numbered picks (up to 5)
+    picks = plan["picks"]
+    labels = ["#1 Top Pick", "#2", "#3", "#4", "#5"]
 
-    # Backup
-    if plan["backup"]:
-        b = plan["backup"]
-        lines.append("Backup Option:")
-        lines.append(f"{b['venue']} — {b['time']}")
-        lines.append(f"- Event: {b['event_type']}")
-        crowd_desc2 = []
-        if b["conversationFriendly"]:
-            crowd_desc2.append("conversational")
-        if b["repeatFriendly"]:
-            crowd_desc2.append("repeat-friendly")
-        if b["energy"] == "high":
-            crowd_desc2.append("higher energy")
-        elif b["energy"] == "medium":
-            crowd_desc2.append("relaxed vibe")
-        lines.append(f"- Crowd: {', '.join(crowd_desc2) if crowd_desc2 else 'standard'}")
+    for i, pick in enumerate(picks):
+        label = labels[i] if i < len(labels) else f"#{i+1}"
+        big = "  *** BIG EVENT ***" if pick.get("big_event") else ""
+        lines.append(f"{label}: {pick['venue']} — {pick['time']}{big}")
+        lines.append(f"  {pick['event_type']}")
+        lines.append(f"  Crowd: {_crowd_desc(pick)}  |  Grade {pick['grade']}  |  {pick['decision']}")
+        lines.append(f"  {pick['reason']}")
         lines.append("")
 
-    # Featured venue notes
+    # Featured venue notes (only if not already in picks)
+    pick_venues = {p["venue"] for p in picks}
+    featured_shown = False
     for fname, note in plan["featured_notes"].items():
-        lines.append(f"{fname}:")
-        lines.append(f"- {note}")
+        if fname in pick_venues:
+            continue
+        if not featured_shown:
+            lines.append("Venue Notes:")
+            featured_shown = True
+        lines.append(f"  {fname}: {note}")
+    if featured_shown:
         lines.append("")
 
-    # Extra scraped events (beyond primary/backup)
-    extra = [c for c in plan.get("all_candidates", [])
-             if c != plan["primary"] and c != plan["backup"]
-             and c.get("source") and c["score"] >= 6]
-    if extra:
-        lines.append("Also happening:")
-        for e in extra[:3]:
-            big = " ***" if e.get("big_event") else ""
-            lines.append(f"- {e['event_type']} @ {e['venue']} {e['time']}{big}")
-        lines.append("")
-
-    # Call / Grade / Priority
-    lines.append(f"Call: {plan['call']}")
-    lines.append(f"Crowd Grade: {plan['crowd_grade']}")
-    lines.append(f"Priority Level: {plan['priority']}")
+    # Summary line
+    lines.append(f"Call: {plan['call']}  |  Crowd Grade: {plan['crowd_grade']}  |  Priority: {plan['priority']}")
 
     return "\n".join(lines)
+
+
+def _short_venue(name):
+    """Shorten venue name for SMS."""
+    return (name
+            .replace("Ocean Pub", "")
+            .replace("Tavern", "")
+            .replace(" (Ocean View Deck)", "")
+            .replace("Downtown ", "")
+            .replace("(Hwy 101)", "")
+            .strip())
 
 
 def format_sms(plan):
@@ -459,18 +465,20 @@ def format_sms(plan):
     if not plan["has_events"]:
         return f"{plan['day_name']}: No events today."
 
-    p = plan["primary"]
-    # e.g. "Thu: Monarch 4-7PM, GO, Grade A, High priority"
+    picks = plan["picks"]
     short_day = plan["day_name"][:3]
-    venue_short = p["venue"].replace("Ocean Pub", "").replace("Tavern", "").strip()
-    msg = f"{short_day}: {venue_short} {p['time']}, {plan['call']}, Grade {plan['crowd_grade']}, {plan['priority']} priority"
 
-    if plan["backup"]:
-        b = plan["backup"]
-        b_short = b["venue"].replace("Ocean Pub", "").replace("Tavern", "").strip()
-        alt = f" | Alt: {b_short} {b['time']}"
-        if len(msg) + len(alt) <= 160:
-            msg += alt
+    # First line: top pick + overall call
+    p = picks[0]
+    msg = f"{short_day}: 1){_short_venue(p['venue'])} {p['time']}"
+
+    # Add picks 2-3 if they fit
+    for i, pick in enumerate(picks[1:3], start=2):
+        addition = f" {i}){_short_venue(pick['venue'])} {pick['time']}"
+        if len(msg) + len(addition) + 25 <= 160:  # reserve space for call line
+            msg += addition
+
+    msg += f" | {plan['call']}, {plan['priority']}"
 
     return msg[:160]
 
