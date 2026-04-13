@@ -179,6 +179,7 @@ export function getRecommendations(
       decision: decisionFor(grade),
       reason,
       score,
+      infoUrl: venue.infoUrl,
     });
   }
   venueCandidates.sort((a, b) => b.score - a.score);
@@ -270,6 +271,7 @@ export function getDayPicks(
       decision: decisionFor(grade),
       reason,
       score,
+      infoUrl: venue.infoUrl,
     });
   }
 

@@ -8,6 +8,7 @@ export const VENUES: Venue[] = [
     repeatFriendly: true,
     conversationFriendly: true,
     energy: 'medium',
+    infoUrl: 'https://www.delmarplaza.com/events',
     events: [
       { day: 'Wednesday', type: 'acoustic', time: '4-7 PM', broadAppeal: true },
       { day: 'Thursday', type: 'acoustic', time: '4-7 PM', broadAppeal: true },
@@ -22,6 +23,7 @@ export const VENUES: Venue[] = [
     repeatFriendly: true,
     conversationFriendly: true,
     energy: 'medium',
+    infoUrl: 'https://www.delmarplaza.com/events',
     events: [
       { day: 'Thursday', type: 'Seaside Sessions', time: '5-7 PM', broadAppeal: true },
       { day: 'Saturday', type: 'Seaside Sessions', time: '5-7 PM', broadAppeal: true },
@@ -33,6 +35,7 @@ export const VENUES: Venue[] = [
     repeatFriendly: true,
     conversationFriendly: true,
     energy: 'medium',
+    infoUrl: 'https://www.jakesdelmar.com',
     events: [
       { day: 'Friday', type: 'happy hour', time: '4-6 PM', broadAppeal: true },
       { day: 'Saturday', type: 'sunset crowd', time: '5-8 PM', broadAppeal: true },
@@ -47,6 +50,7 @@ export const VENUES: Venue[] = [
     repeatFriendly: false,
     conversationFriendly: false,
     energy: 'high',
+    infoUrl: 'https://www.bellyup.com/events',
     events: [
       { day: 'Thursday', type: 'rock headliner', time: '8:00 PM', broadAppeal: false },
       { day: 'Friday', type: '80s dance night', time: '8:00 PM', broadAppeal: true },
@@ -60,6 +64,7 @@ export const VENUES: Venue[] = [
     repeatFriendly: true,
     conversationFriendly: true,
     energy: 'medium',
+    infoUrl: 'https://www.cedrosdesigndistrict.net',
     events: [
       { day: 'Wednesday', type: 'walkable district', time: '6-9 PM', broadAppeal: true },
       { day: 'Thursday', type: 'walkable district', time: '6-9 PM', broadAppeal: true },
@@ -72,6 +77,7 @@ export const VENUES: Venue[] = [
     repeatFriendly: true,
     conversationFriendly: false,
     energy: 'high',
+    infoUrl: 'https://www.pizzaport.com/solana-beach',
     events: [
       { day: 'Friday', type: 'brewery crowd', time: '6-10 PM', broadAppeal: true },
       { day: 'Saturday', type: 'brewery crowd', time: '6-10 PM', broadAppeal: true },
@@ -85,6 +91,7 @@ export const VENUES: Venue[] = [
     repeatFriendly: true,
     conversationFriendly: true,
     energy: 'medium',
+    infoUrl: 'https://www.localunion101.com',
     events: [
       { day: 'Wednesday', type: 'happy hour', time: '5-7 PM', broadAppeal: true },
       { day: 'Thursday', type: 'happy hour', time: '5-7 PM', broadAppeal: true },
@@ -97,6 +104,7 @@ export const VENUES: Venue[] = [
     repeatFriendly: true,
     conversationFriendly: false,
     energy: 'high',
+    infoUrl: 'https://maps.google.com/?q=The+Saloon+Encinitas',
     events: [
       { day: 'Friday', type: 'live band', time: '9:00 PM', broadAppeal: true },
       { day: 'Saturday', type: 'live band', time: '9:00 PM', broadAppeal: true },
@@ -108,6 +116,7 @@ export const VENUES: Venue[] = [
     repeatFriendly: false,
     conversationFriendly: false,
     energy: 'high',
+    infoUrl: 'https://maps.google.com/?q=Moonlight+Beach+Bar+Encinitas',
     events: [
       { day: 'Saturday', type: 'DJ night', time: '9:00 PM', broadAppeal: false },
     ],
@@ -118,6 +127,7 @@ export const VENUES: Venue[] = [
     repeatFriendly: true,
     conversationFriendly: true,
     energy: 'medium',
+    infoUrl: 'https://maps.google.com/?q=1st+Street+Bar+Encinitas',
     events: [
       { day: 'Tuesday', type: 'neighborhood night', time: '7-10 PM', broadAppeal: true },
       { day: 'Thursday', type: 'neighborhood night', time: '7-10 PM', broadAppeal: true },
@@ -132,6 +142,7 @@ export const VENUES: Venue[] = [
     repeatFriendly: true,
     conversationFriendly: true,
     energy: 'medium',
+    infoUrl: 'https://www.thisiscampfire.com',
     events: [
       { day: 'Friday', type: 'patio scene', time: '6-9 PM', broadAppeal: true },
       { day: 'Saturday', type: 'patio scene', time: '6-9 PM', broadAppeal: true },
@@ -143,6 +154,7 @@ export const VENUES: Venue[] = [
     repeatFriendly: false,
     conversationFriendly: false,
     energy: 'high',
+    infoUrl: 'https://www.park101.com',
     events: [
       { day: 'Friday', type: 'outdoor DJ', time: '8:00 PM', broadAppeal: true },
       { day: 'Saturday', type: 'outdoor DJ', time: '8:00 PM', broadAppeal: true },

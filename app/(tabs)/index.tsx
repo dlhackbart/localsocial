@@ -1,6 +1,6 @@
 import { Link } from 'expo-router';
 import { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { getSampleEvents } from '../../src/data/events';
 import { getWeeklyPlan, DayPlan } from '../../src/scoring';
 import { usePreferences } from '../../src/store/preferences';
@@ -23,8 +23,15 @@ function PickCard({ rec, rank }: { rec: Recommendation; rank: number }) {
       ? CATEGORY_LABELS[rec.category] ?? 'Event'
       : rec.subtitle;
 
+  const handlePress = () => {
+    if (rec.infoUrl) Linking.openURL(rec.infoUrl);
+  };
+
+  const Wrapper = rec.infoUrl ? Pressable : View;
+  const wrapperProps = rec.infoUrl ? { onPress: handlePress } : {};
+
   return (
-    <View style={styles.pickRow}>
+    <Wrapper {...wrapperProps} style={styles.pickRow}>
       <View style={styles.rankCircle}>
         <Text style={styles.rankText}>{rank}</Text>
       </View>
@@ -40,8 +47,11 @@ function PickCard({ rec, rank }: { rec: Recommendation; rank: number }) {
           <Text style={styles.pickGrade}>Grade {rec.grade}</Text>
           <Text style={styles.pickReason}>{rec.reason}</Text>
         </View>
+        {rec.infoUrl && (
+          <Text style={styles.infoLink}>More info →</Text>
+        )}
       </View>
-    </View>
+    </Wrapper>
   );
 }
 
@@ -228,6 +238,12 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
+  infoLink: {
+    color: colors.accent,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
+  },
   legend: { color: colors.textDim, fontSize: 12, textAlign: 'center' },
   link: { alignSelf: 'center' },
   linkText: { color: colors.accent, fontWeight: '600' },

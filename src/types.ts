@@ -50,6 +50,7 @@ export interface Venue {
   conversationFriendly: boolean;
   energy: Energy;
   lowSocialValue?: boolean;
+  infoUrl?: string;
   events: VenueEvent[];
 }
 
@@ -91,6 +92,7 @@ export interface Recommendation {
   score: number;
   category?: Category;      // events only
   sourceName?: string;      // events only
+  infoUrl?: string;         // tappable link for more info
 }
 
 export interface RecommendationResult {
