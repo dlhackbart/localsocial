@@ -230,3 +230,106 @@ export function getRecommendations(
 
   return { topVenue, topEvent };
 }
+
+// ─── Multi-pick + weekly views ─────────────────────────────────────────────
+
+export interface DayPlan {
+  date: string;          // ISO YYYY-MM-DD
+  dayName: DayName;
+  isTonight: boolean;
+  picks: Recommendation[];
+  emptyMessage?: string;
+}
+
+export function getDayPicks(
+  prefs: Preferences,
+  events: LocalEvent[],
+  targetDate: Date,
+): DayPlan {
+  const day = todayName(targetDate);
+  const areas = allowedAreas(prefs);
+  const categorySet = new Set(prefs.categories);
+  const dateStr = targetDate.toISOString().slice(0, 10);
+
+  // Score all venues for this day
+  const all: Recommendation[] = [];
+  for (const venue of VENUES) {
+    if (!areas.has(venue.area)) continue;
+    const ev = venue.events.find((e) => e.day === day);
+    if (!ev) continue;
+
+    const { score, reason } = scoreVenueEvent(venue, ev, prefs.goal, prefs.vibe);
+    const grade = gradeFor(score);
+    all.push({
+      kind: 'venue',
+      title: venue.name,
+      area: venue.area,
+      time: ev.time,
+      subtitle: ev.type,
+      grade,
+      decision: decisionFor(grade),
+      reason,
+      score,
+    });
+  }
+
+  // Score sample events for this day
+  for (const ev of events) {
+    if (!areas.has(ev.area)) continue;
+    if (!categorySet.has(ev.category)) continue;
+    if (ev.date !== dateStr) continue;
+
+    const { score, reason } = scoreLocalEvent(ev, prefs.goal, prefs.vibe);
+    const grade = gradeFor(score);
+    all.push({
+      kind: 'event',
+      title: ev.title,
+      area: ev.area,
+      time: ev.time,
+      subtitle: ev.description ?? ev.category.replace(/_/g, ' '),
+      grade,
+      decision: decisionFor(grade),
+      reason,
+      score,
+      category: ev.category,
+      sourceName: ev.sourceName,
+    });
+  }
+
+  all.sort((a, b) => b.score - a.score);
+
+  // Top 5 picks
+  const picks = all.slice(0, 5);
+
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const isTonight = dateStr === todayStr ||
+    (now.getHours() >= NEXT_DAY_CUTOFF_HOUR && dateStr === new Date(Date.now() + 86400000).toISOString().slice(0, 10));
+
+  return {
+    date: dateStr,
+    dayName: day,
+    isTonight,
+    picks,
+    emptyMessage: picks.length === 0 ? `No events ${day}.` : undefined,
+  };
+}
+
+export function getWeeklyPlan(
+  prefs: Preferences,
+  events: LocalEvent[],
+): DayPlan[] {
+  const now = new Date();
+  const startDate = now.getHours() >= NEXT_DAY_CUTOFF_HOUR
+    ? new Date(Date.now() + 86400000)
+    : now;
+
+  const plans: DayPlan[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + i);
+    d.setHours(12, 0, 0, 0);
+    plans.push(getDayPicks(prefs, events, d));
+  }
+  return plans;
+}

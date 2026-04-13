@@ -1,11 +1,9 @@
 import { Link } from 'expo-router';
 import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { VENUES } from '../../src/data/venues';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { getSampleEvents } from '../../src/data/events';
-import { getRecommendations, todayName } from '../../src/scoring';
+import { getWeeklyPlan, DayPlan } from '../../src/scoring';
 import { usePreferences } from '../../src/store/preferences';
-import { useSubscription } from '../../src/store/subscription';
 import { colors, radius, spacing } from '../../src/theme';
 import { CATEGORIES, Decision, Recommendation } from '../../src/types';
 
@@ -19,50 +17,71 @@ const CATEGORY_LABELS: Record<string, string> = Object.fromEntries(
   CATEGORIES.map((c) => [c.value, c.label]),
 );
 
-function Card({ rec, label }: { rec: Recommendation; label: string }) {
+function PickCard({ rec, rank }: { rec: Recommendation; rank: number }) {
   const tag =
     rec.kind === 'event' && rec.category
       ? CATEGORY_LABELS[rec.category] ?? 'Event'
-      : 'Regular spot';
+      : rec.subtitle;
 
   return (
-    <View style={styles.card}>
-      <View style={styles.cardHeaderRow}>
-        <Text style={styles.cardLabel}>{label}</Text>
-        <Text style={styles.pill}>{tag}</Text>
+    <View style={styles.pickRow}>
+      <View style={styles.rankCircle}>
+        <Text style={styles.rankText}>{rank}</Text>
       </View>
-      <Text style={styles.venue}>{rec.title}</Text>
-      <Text style={styles.sub}>
-        {rec.area} · {rec.time}
-        {rec.sourceName ? ` · ${rec.sourceName}` : ''}
-      </Text>
-      <Text style={styles.sub}>{rec.subtitle}</Text>
-      <View style={styles.row}>
-        <View style={[styles.badge, { backgroundColor: decisionColor[rec.decision] }]}>
-          <Text style={styles.badgeText}>{rec.decision}</Text>
-        </View>
-        <View style={[styles.badge, styles.gradeBadge]}>
-          <Text style={styles.badgeText}>Grade {rec.grade}</Text>
+      <View style={styles.pickContent}>
+        <Text style={styles.pickTitle}>{rec.title}</Text>
+        <Text style={styles.pickSub}>
+          {rec.area} · {rec.time} · {tag}
+        </Text>
+        <View style={styles.pickBadges}>
+          <View style={[styles.miniBadge, { backgroundColor: decisionColor[rec.decision] }]}>
+            <Text style={styles.miniBadgeText}>{rec.decision}</Text>
+          </View>
+          <Text style={styles.pickGrade}>Grade {rec.grade}</Text>
+          <Text style={styles.pickReason}>{rec.reason}</Text>
         </View>
       </View>
-      <Text style={styles.reason}>{rec.reason}</Text>
+    </View>
+  );
+}
+
+function DaySection({ plan }: { plan: DayPlan }) {
+  const isTonight = plan.isTonight;
+  const header = isTonight ? `Tonight — ${plan.dayName}` : plan.dayName;
+
+  return (
+    <View style={[styles.dayCard, isTonight && styles.dayCardTonight]}>
+      <View style={styles.dayHeader}>
+        <Text style={[styles.dayTitle, isTonight && styles.dayTitleTonight]}>
+          {header}
+        </Text>
+        {!isTonight && (
+          <Text style={styles.dayDate}>{plan.date.slice(5)}</Text>
+        )}
+      </View>
+
+      {plan.picks.length > 0 ? (
+        plan.picks.map((pick, i) => (
+          <PickCard key={`${plan.date}-${i}`} rec={pick} rank={i + 1} />
+        ))
+      ) : (
+        <Text style={styles.noEvents}>{plan.emptyMessage}</Text>
+      )}
     </View>
   );
 }
 
 export default function HomeScreen() {
-  const { prefs, ready: prefsReady } = usePreferences();
-  const sub = useSubscription();
+  const { prefs, ready } = usePreferences();
 
-  // Compute everything synchronously — no async, no network, no loading screen
   const events = useMemo(() => getSampleEvents(), []);
 
-  const result = useMemo(
-    () => prefsReady ? getRecommendations(prefs, events) : null,
-    [prefsReady, prefs, events],
+  const weeklyPlan = useMemo(
+    () => ready ? getWeeklyPlan(prefs, events) : [],
+    [ready, prefs, events],
   );
 
-  if (!prefsReady || !sub.ready || !result) {
+  if (!ready || weeklyPlan.length === 0) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
         <Text style={styles.loadingTitle}>Loading...</Text>
@@ -70,42 +89,26 @@ export default function HomeScreen() {
     );
   }
 
-  const now = new Date();
-  const isLateNight = now.getHours() >= 22;
-  const dayLabel = isLateNight
-    ? `Tomorrow · ${todayName(new Date(Date.now() + 86400000))}`
-    : todayName();
-
-  const anyPick = result.topVenue || result.topEvent;
-
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.header}>{dayLabel}</Text>
+      <Text style={styles.header}>Social Plan</Text>
       <Text style={styles.dim}>
-        {prefs.homeArea} · {prefs.enabledZones.length} nearby zones
+        {prefs.homeArea} + {prefs.enabledZones.join(', ')}
       </Text>
 
-      {anyPick ? (
-        <>
-          {result.topVenue && (
-            <Card rec={result.topVenue} label={isLateNight ? 'Top Venue Tomorrow' : 'Top Venue Tonight'} />
-          )}
-          {result.topEvent && (
-            <Card rec={result.topEvent} label={isLateNight ? 'Top Event Tomorrow' : 'Top Event Tonight'} />
-          )}
-          <Text style={styles.legend}>
-            Grade A = strong match · B = decent · C = skip
-          </Text>
-        </>
-      ) : (
-        <View style={styles.card}>
-          <Text style={styles.venue}>{result.emptyMessage ?? 'No matches today.'}</Text>
-        </View>
-      )}
+      {weeklyPlan.map((plan) => (
+        <DaySection key={plan.date} plan={plan} />
+      ))}
+
+      <Text style={styles.legend}>
+        Grade A = strong match · B = decent · C = skip
+      </Text>
 
       <Link href="/preferences" style={styles.link}>
         <Text style={styles.linkText}>Edit preferences</Text>
       </Link>
+
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
@@ -116,7 +119,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: spacing.xl,
   },
   loadingTitle: {
     color: colors.text,
@@ -124,34 +126,109 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   header: { color: colors.text, fontSize: 28, fontWeight: '700' },
-  dim: { color: colors.textDim },
-  card: {
+  dim: { color: colors.textDim, marginBottom: spacing.sm },
+
+  // Day sections
+  dayCard: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
     padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
-  cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardLabel: { color: colors.textDim, textTransform: 'uppercase', fontSize: 12, letterSpacing: 1 },
-  pill: {
+  dayCardTonight: {
+    borderColor: colors.accent,
+    borderWidth: 2,
+  },
+  dayHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  dayTitle: {
     color: colors.text,
-    backgroundColor: colors.cardAlt,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radius.md,
-    fontSize: 11,
-    overflow: 'hidden',
+    fontSize: 18,
+    fontWeight: '700',
   },
-  venue: { color: colors.text, fontSize: 22, fontWeight: '700' },
-  sub: { color: colors.textDim, fontSize: 14 },
-  row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
-  badge: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.md },
-  gradeBadge: { backgroundColor: colors.cardAlt },
-  badgeText: { color: colors.text, fontWeight: '700' },
-  reason: { color: colors.text, marginTop: spacing.sm, fontStyle: 'italic' },
+  dayTitleTonight: {
+    color: colors.accent,
+    fontSize: 20,
+  },
+  dayDate: {
+    color: colors.textDim,
+    fontSize: 13,
+  },
+  noEvents: {
+    color: colors.textDim,
+    fontStyle: 'italic',
+    paddingVertical: spacing.sm,
+  },
+
+  // Pick rows
+  pickRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  rankCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.cardAlt,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  rankText: {
+    color: colors.text,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  pickContent: {
+    flex: 1,
+    gap: 2,
+  },
+  pickTitle: {
+    color: colors.text,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  pickSub: {
+    color: colors.textDim,
+    fontSize: 13,
+  },
+  pickBadges: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: 2,
+  },
+  miniBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  miniBadgeText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  pickGrade: {
+    color: colors.textDim,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  pickReason: {
+    color: colors.textDim,
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+
   legend: { color: colors.textDim, fontSize: 12, textAlign: 'center' },
-  link: { marginTop: spacing.md, alignSelf: 'center' },
+  link: { alignSelf: 'center' },
   linkText: { color: colors.accent, fontWeight: '600' },
 });
