@@ -15,8 +15,12 @@ supabase/.temp/
 __pycache__/
 *.pyc
 
-# Notification log
+# Notification + scraper logs
 scripts/notify.log
+scripts/scrape.log
+
+# Scraped event data (regenerated daily)
+data/scraped_events.json
 
 # Claude Code local settings
 .claude/

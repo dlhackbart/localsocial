@@ -221,6 +221,24 @@ def decision_for(grade):
     return {"A": "GO", "B": "MAYBE", "C": "SKIP"}[grade]
 
 
+# ─── Scraped events ──────────────────────────────────────────────────────────
+
+SCRAPED_FILE = PROJECT_ROOT / "data" / "scraped_events.json"
+
+
+def load_scraped_events(for_date: date) -> list[dict]:
+    """Load scraped events for a specific date."""
+    if not SCRAPED_FILE.exists():
+        return []
+    try:
+        data = json.loads(SCRAPED_FILE.read_text())
+        events = data.get("events", [])
+        date_str = for_date.isoformat()
+        return [e for e in events if e.get("date") == date_str]
+    except (json.JSONDecodeError, KeyError):
+        return []
+
+
 # ─── Plan generation ─────────────────────────────────────────────────────────
 
 def generate_plan(today=None, home_area=None, zones=None):
@@ -288,9 +306,51 @@ def generate_plan(today=None, home_area=None, zones=None):
     if zones:
         area_str = f"{home_area} / {' / '.join(zones[:2])}"
 
+    # Load scraped events for today
+    scraped = load_scraped_events(today)
+    scraped_for_area = [e for e in scraped if e.get("area") in allowed_areas]
+
+    # Scraped events as candidates (score them generously — they're real, timely data)
+    scraped_candidates = []
+    for ev in scraped_for_area:
+        score = 6  # base: real event, confirmed happening
+        reasons = []
+        if ev.get("big_event"):
+            score += 4
+            reasons.append("Major event — worth the trip")
+        if ev.get("category") == "live_music_small":
+            score += 2
+            reasons.append("Live music tonight")
+        elif ev.get("category") in ("markets", "food_drink"):
+            score += 1
+            reasons.append("Social food/market scene")
+        if ev.get("venue") in ("Belly Up Tavern", "Del Mar Plaza"):
+            score += 1
+
+        grade = grade_for(score)
+        scraped_candidates.append({
+            "venue": ev.get("venue", "Unknown"),
+            "area": ev.get("area", ""),
+            "time": ev.get("time", ""),
+            "event_type": ev.get("title", ""),
+            "score": score,
+            "grade": grade,
+            "decision": decision_for(grade),
+            "reason": reasons[0] if reasons else "Confirmed local event",
+            "energy": "high" if ev.get("big_event") else "medium",
+            "conversationFriendly": ev.get("category") not in ("live_music_small",),
+            "repeatFriendly": False,
+            "source": ev.get("source", ""),
+            "big_event": ev.get("big_event", False),
+        })
+
+    # Merge venue candidates + scraped, sort by score
+    all_candidates = candidates + scraped_candidates
+    all_candidates.sort(key=lambda x: x["score"], reverse=True)
+
     # Build result
-    primary = candidates[0] if len(candidates) > 0 else None
-    backup = candidates[1] if len(candidates) > 1 else None
+    primary = all_candidates[0] if len(all_candidates) > 0 else None
+    backup = all_candidates[1] if len(all_candidates) > 1 else None
 
     # Overall call: use primary's decision, or SKIP if nothing
     if primary and primary["decision"] == "GO":
@@ -299,6 +359,10 @@ def generate_plan(today=None, home_area=None, zones=None):
         call = "MAYBE"
     else:
         call = "SKIP"
+
+    # Bump priority if there's a big event today
+    if any(c.get("big_event") for c in all_candidates):
+        priority = "High"
 
     crowd_grade = primary["grade"] if primary else "C"
 
@@ -314,7 +378,8 @@ def generate_plan(today=None, home_area=None, zones=None):
         "featured_notes": featured_notes,
         "call": call,
         "crowd_grade": crowd_grade,
-        "all_candidates": candidates,
+        "all_candidates": all_candidates,
+        "scraped_count": len(scraped_for_area),
     }
 
 
@@ -368,6 +433,17 @@ def format_full_plan(plan):
     for fname, note in plan["featured_notes"].items():
         lines.append(f"{fname}:")
         lines.append(f"- {note}")
+        lines.append("")
+
+    # Extra scraped events (beyond primary/backup)
+    extra = [c for c in plan.get("all_candidates", [])
+             if c != plan["primary"] and c != plan["backup"]
+             and c.get("source") and c["score"] >= 6]
+    if extra:
+        lines.append("Also happening:")
+        for e in extra[:3]:
+            big = " ***" if e.get("big_event") else ""
+            lines.append(f"- {e['event_type']} @ {e['venue']} {e['time']}{big}")
         lines.append("")
 
     # Call / Grade / Priority
