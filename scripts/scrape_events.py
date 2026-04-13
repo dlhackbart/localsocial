@@ -430,6 +430,84 @@ def get_seaside_sessions() -> list[dict]:
     return events
 
 
+# ─── La Paloma Theatre ────────────────────────────────────────────────────────
+
+def scrape_la_paloma() -> list[dict]:
+    """La Paloma Theatre showtimes (Encinitas).
+
+    Veezi ticketing widget renders via JS — can't scrape with urllib.
+    Known schedule maintained here, refreshed when WebFetch data is available.
+    Schedule source: lapalomatheatre.com/showtimes (Veezi widget).
+    """
+    # Known schedule (scraped via WebFetch, updated periodically)
+    # Format: (date, title, time, big_event)
+    SCHEDULE = [
+        ("2026-04-12", "The Godfather", "7:30 PM", False),
+        ("2026-04-12", "Epic: Elvis Presley in Concert", "2:45 PM", False),
+        ("2026-04-13", "Hamnet", "5:20 PM", False),
+        ("2026-04-13", "Wuthering Heights", "8:00 PM", False),
+        ("2026-04-14", "Hercules", "6:00 PM", False),
+        ("2026-04-14", "No Other Choice", "8:10 PM", False),
+        ("2026-04-15", "The Godfather", "8:00 PM", False),
+        ("2026-04-15", "Nirvanna the Band the Show the Movie", "5:40 PM", False),
+        ("2026-04-16", "SD Italian Film Festival: The Time It Takes", "7:00 PM", True),
+        ("2026-04-16", "Epic: Elvis Presley in Concert", "4:00 PM", False),
+        ("2026-04-18", "The Godfather Part II", "7:30 PM", False),
+        ("2026-04-18", "Hercules", "12:30 PM", False),
+        ("2026-04-19", "The Godfather Part II", "5:00 PM", False),
+        ("2026-04-19", "Hercules", "3:00 PM", False),
+        ("2026-04-20", "The Big Lebowski", "5:00 PM", False),
+        ("2026-04-20", "The Big Lebowski", "8:00 PM", False),
+        ("2026-04-21", "The Godfather Part II", "8:00 PM", False),
+        ("2026-04-23", "Raising Arizona", "8:00 PM", False),
+        ("2026-04-24", "The Rocky Horror Picture Show (Live Shadow Cast)", "10:30 PM", True),
+        ("2026-04-25", "Raising Arizona", "6:00 PM", False),
+        ("2026-04-26", "The Maltese Falcon", "5:00 PM", False),
+        ("2026-04-28", "Raising Arizona", "8:00 PM", False),
+        ("2026-04-29", "The Maltese Falcon", "6:00 PM", False),
+    ]
+
+    today = date.today()
+    events = []
+    seen = set()
+
+    for date_str, title, time_str, big in SCHEDULE:
+        try:
+            event_date = date.fromisoformat(date_str)
+        except ValueError:
+            continue
+        if event_date < today or (event_date - today).days > LOOKAHEAD_DAYS:
+            continue
+
+        # One entry per film per night (skip duplicate showtimes)
+        key = f"{title.lower()}|{date_str}"
+        if key in seen:
+            continue
+        seen.add(key)
+
+        events.append({
+            "title": title,
+            "date": date_str,
+            "time": time_str,
+            "venue": "La Paloma Theatre",
+            "area": "Encinitas",
+            "source": "lapalomatheatre.com",
+            "category": "movies_indie",
+            "big_event": big,
+        })
+
+    return events
+
+
+def _is_big_la_paloma(title: str) -> bool:
+    """Flag special events at La Paloma (not regular screenings)."""
+    lower = title.lower()
+    return any(kw in lower for kw in [
+        "rocky horror", "film festival", "live", "shadow cast",
+        "premiere", "special engagement",
+    ])
+
+
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def scrape_all() -> list[dict]:
@@ -450,6 +528,9 @@ def scrape_all() -> list[dict]:
 
     print("[SCRAPE] North Coast Rep...")
     all_events.extend(scrape_north_coast_rep())
+
+    print("[SCRAPE] La Paloma Theatre...")
+    all_events.extend(scrape_la_paloma())
 
     # Dedupe by title + date
     seen = set()
