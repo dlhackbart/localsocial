@@ -1,6 +1,7 @@
 import { Link } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { getSampleEvents } from '../../src/data/events';
 import { loadEvents } from '../../src/events/store';
 import { getRecommendations, todayName } from '../../src/scoring';
 import { usePreferences } from '../../src/store/preferences';
@@ -58,9 +59,20 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!prefsReady) return;
     setEventsLoading(true);
+    // Load sample events immediately — always available, no network needed.
+    // Live iCal events loaded in background and merged when ready.
+    const samples = getSampleEvents();
+    setEvents(samples);
+    setEventsLoading(false);
+
+    // Try live sources in background (non-blocking)
     loadEvents(prefs.homeArea)
-      .then(setEvents)
-      .finally(() => setEventsLoading(false));
+      .then((liveEvents) => {
+        if (liveEvents.length > samples.length) {
+          setEvents(liveEvents);
+        }
+      })
+      .catch(() => {});
   }, [prefsReady, prefs.homeArea]);
 
   const result = useMemo(
