@@ -113,17 +113,6 @@ export default function HomeScreen() {
         {events.filter((e) => e.source === 'sample').length} sample
       </Text>
 
-      {events.filter((e) => e.source === 'ical').length === 0 && (
-        <View style={styles.cta}>
-          <Text style={styles.ctaTitle}>No live feeds for {prefs.homeArea} yet</Text>
-          <Text style={styles.dim}>
-            Know a public calendar? Adding one helps you and every other user in your area.
-          </Text>
-          <Link href="/add-source" style={styles.ctaLink}>
-            <Text style={styles.linkText}>Add a calendar feed →</Text>
-          </Link>
-        </View>
-      )}
 
       {anyPick ? (
         <>

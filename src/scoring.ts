@@ -114,12 +114,18 @@ const UPCOMING_GRACE_MINUTES = 60;
 
 function parseEventTimeToMinutes(time: string): number | null {
   // Accept "7:00 AM", "6:30 PM", "19:00", "7 PM", "4-7 PM" (use start).
+  // For ranges like "4-7 PM", the PM applies to both parts.
   const first = time.split(/[-–—]/)[0].trim();
   const m = first.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/i);
   if (!m) return null;
   let h = parseInt(m[1], 10);
   const mm = m[2] ? parseInt(m[2], 10) : 0;
-  const ap = m[3]?.toUpperCase();
+  // If first part has no AM/PM, inherit from the full string (e.g., "4-7 PM" → PM)
+  let ap = m[3]?.toUpperCase();
+  if (!ap) {
+    const fullMatch = time.match(/(AM|PM)\s*$/i);
+    if (fullMatch) ap = fullMatch[1].toUpperCase();
+  }
   if (ap === 'PM' && h < 12) h += 12;
   if (ap === 'AM' && h === 12) h = 0;
   if (h > 23 || mm > 59) return null;
