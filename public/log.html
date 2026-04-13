@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log Last Night</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, system-ui, sans-serif;
+    background: #0e1116; color: #f4f6fa;
+    padding: 24px; max-width: 420px; margin: 0 auto;
+  }
+  h1 { font-size: 22px; margin-bottom: 8px; }
+  .dim { color: #9aa3b2; font-size: 14px; margin-bottom: 24px; }
+  label { display: block; color: #9aa3b2; font-size: 13px; margin-bottom: 6px; margin-top: 20px; text-transform: uppercase; letter-spacing: 1px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    padding: 10px 18px; border-radius: 12px; border: 1px solid #2a313d;
+    background: #171c24; color: #f4f6fa; font-weight: 600; font-size: 15px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .chip.active { background: #4f8cff; border-color: #4f8cff; color: #fff; }
+  .chip:hover { border-color: #4f8cff; }
+  input[type="text"] {
+    width: 100%; padding: 12px 16px; border-radius: 12px;
+    border: 1px solid #2a313d; background: #171c24; color: #f4f6fa;
+    font-size: 16px; outline: none;
+  }
+  input[type="text"]:focus { border-color: #4f8cff; }
+  input[type="text"]::placeholder { color: #9aa3b2; }
+  .venue-chips { margin-top: 8px; }
+  button.submit {
+    width: 100%; padding: 14px; margin-top: 28px; border: none;
+    border-radius: 12px; background: #4f8cff; color: #fff;
+    font-size: 16px; font-weight: 700; cursor: pointer;
+  }
+  button.submit:disabled { opacity: 0.5; }
+  button.no-btn {
+    width: 100%; padding: 14px; margin-top: 12px; border: 1px solid #2a313d;
+    border-radius: 12px; background: #171c24; color: #9aa3b2;
+    font-size: 16px; font-weight: 600; cursor: pointer;
+  }
+  .success {
+    text-align: center; padding: 40px 20px;
+  }
+  .success h2 { color: #30c67c; font-size: 24px; margin-bottom: 12px; }
+  .success p { color: #9aa3b2; }
+</style>
+</head>
+<body>
+
+<div id="form-view">
+  <h1>Log Last Night</h1>
+  <p class="dim">Quick check-in — 10 seconds</p>
+
+  <label>Venue</label>
+  <div class="chips venue-chips">
+    <div class="chip" onclick="pickVenue(this)">Monarch</div>
+    <div class="chip" onclick="pickVenue(this)">Belly Up</div>
+    <div class="chip" onclick="pickVenue(this)">Jake's</div>
+    <div class="chip" onclick="pickVenue(this)">1st Street</div>
+    <div class="chip" onclick="pickVenue(this)">Union</div>
+    <div class="chip" onclick="pickVenue(this)">La Paloma</div>
+    <div class="chip" onclick="pickVenue(this)">The Saloon</div>
+    <div class="chip" onclick="pickVenue(this)">Campfire</div>
+  </div>
+  <input type="text" id="venue-input" placeholder="or type a venue..." style="margin-top: 10px;">
+
+  <label>Crowd Grade</label>
+  <div class="chips">
+    <div class="chip" onclick="pickGrade(this, 'A')">A</div>
+    <div class="chip" onclick="pickGrade(this, 'B')">B</div>
+    <div class="chip" onclick="pickGrade(this, 'C')">C</div>
+  </div>
+
+  <label>Would go again?</label>
+  <div class="chips">
+    <div class="chip" onclick="pickAgain(this, 'yes')">Yes</div>
+    <div class="chip" onclick="pickAgain(this, 'maybe')">Maybe</div>
+    <div class="chip" onclick="pickAgain(this, 'no')">No</div>
+  </div>
+
+  <button class="submit" onclick="submitLog()">Save</button>
+  <button class="no-btn" onclick="submitDidntGo()">Didn't go out</button>
+</div>
+
+<div id="success-view" style="display:none;">
+  <div class="success">
+    <h2>Logged</h2>
+    <p id="success-msg"></p>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://tplbomaxmlikvuzgirkp.supabase.co';
+const SUPABASE_KEY = 'sb_publishable__nF4YOuYzQWF7y1m90AmLA_R1g0vXab';
+
+let venue = '';
+let grade = null;
+let again = null;
+
+function clearActive(parent) {
+  parent.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+}
+
+function pickVenue(el) {
+  clearActive(el.parentElement);
+  el.classList.add('active');
+  venue = el.textContent;
+  document.getElementById('venue-input').value = venue;
+}
+
+function pickGrade(el, val) {
+  clearActive(el.parentElement);
+  el.classList.add('active');
+  grade = val;
+}
+
+function pickAgain(el, val) {
+  clearActive(el.parentElement);
+  el.classList.add('active');
+  again = val;
+}
+
+// Sync text input with chip selection
+document.getElementById('venue-input').addEventListener('input', function() {
+  venue = this.value;
+  document.querySelectorAll('.venue-chips .chip').forEach(c => c.classList.remove('active'));
+});
+
+function yesterday() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+async function submitLog() {
+  const v = venue || document.getElementById('venue-input').value;
+  if (!v) { alert('Pick or type a venue'); return; }
+
+  const entry = {
+    id: Date.now().toString(),
+    device_id: 'owner',
+    date: yesterday(),
+    went_out: true,
+    venue: v,
+    crowd_grade: grade,
+    would_go_again: again,
+  };
+
+  try {
+    // Save to Supabase
+    await fetch(SUPABASE_URL + '/rest/v1/users', {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({ device_id: 'owner' }),
+    });
+
+    await fetch(SUPABASE_URL + '/rest/v1/logs', {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(entry),
+    });
+
+    showSuccess(v + (grade ? ' · Grade ' + grade : '') + (again ? ' · Again: ' + again : ''));
+  } catch (e) {
+    alert('Save failed: ' + e.message);
+  }
+}
+
+async function submitDidntGo() {
+  const entry = {
+    id: Date.now().toString(),
+    device_id: 'owner',
+    date: yesterday(),
+    went_out: false,
+    venue: 'stayed in',
+    crowd_grade: null,
+    would_go_again: null,
+  };
+
+  try {
+    await fetch(SUPABASE_URL + '/rest/v1/users', {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({ device_id: 'owner' }),
+    });
+
+    await fetch(SUPABASE_URL + '/rest/v1/logs', {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(entry),
+    });
+
+    showSuccess('Stayed in — logged.');
+  } catch (e) {
+    alert('Save failed: ' + e.message);
+  }
+}
+
+function showSuccess(msg) {
+  document.getElementById('form-view').style.display = 'none';
+  document.getElementById('success-view').style.display = 'block';
+  document.getElementById('success-msg').textContent = msg;
+}
+</script>
+</body>
+</html>
