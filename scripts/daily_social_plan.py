@@ -11,6 +11,7 @@ Usage:
 """
 
 import json
+import re
 import sys
 from datetime import datetime, date
 from pathlib import Path
@@ -309,6 +310,32 @@ def generate_plan(today=None, home_area=None, zones=None):
     # Load scraped events for today
     scraped = load_scraped_events(today)
     scraped_for_area = [e for e in scraped if e.get("area") in allowed_areas]
+
+    # Filter out scraped events that are actually static venue acts listed under
+    # a parent venue (e.g., Del Mar Plaza listing "Monarch Ocean Pub – Lee Melton"
+    # when Monarch is already a static venue with its own entry).
+    static_venue_names = {v["name"].lower() for v in VENUES}
+    filtered_scraped = []
+    seen_artists = set()
+    for ev in scraped_for_area:
+        title_lower = ev.get("title", "").lower()
+
+        # Skip if the scraped event title mentions a static venue by name
+        # (it's a duplicate listing from a parent venue's calendar)
+        if any(vname in title_lower for vname in static_venue_names):
+            continue
+
+        # Dedupe same artist on same date (e.g., two Belly Up listings for
+        # "Adam Carolla" — podcast taping + stand up show = same night)
+        # Use first significant word(s) of title as artist key
+        artist_key = re.sub(r'\s*[-–—:].+', '', title_lower).strip()
+        if artist_key in seen_artists:
+            continue
+        seen_artists.add(artist_key)
+
+        filtered_scraped.append(ev)
+
+    scraped_for_area = filtered_scraped
 
     # Scraped events as candidates (score them generously — they're real, timely data)
     scraped_candidates = []
