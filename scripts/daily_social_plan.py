@@ -270,7 +270,52 @@ def generate_plan(today=None, home_area=None, zones=None):
     allowed_areas = {home_area} | set(zones)
     priority = PRIORITY_MAP.get(day_name, "Low")
 
-    # Score all venues with today's events
+    # Load scraped events for today FIRST — we use them to enrich static venues
+    scraped = load_scraped_events(today)
+    scraped_for_area = [e for e in scraped if e.get("area") in allowed_areas]
+
+    # Extract Monarch performer from scraped data (Del Mar Plaza lists them as
+    # "Live Music – Monarch Ocean Pub – Lee Melton"). These replace the generic
+    # "acoustic" placeholder in static data.
+    monarch_performer = None
+    seaside_performer = None
+    other_scraped = []
+    seen_artists = set()
+
+    for ev in scraped_for_area:
+        title = ev.get("title", "")
+        title_lower = title.lower()
+
+        # Monarch performer extraction
+        if "monarch ocean pub" in title_lower and "–" in title:
+            # "Live Music – Monarch Ocean Pub – Lee Melton" → "Lee Melton"
+            parts = title.split("–")
+            if len(parts) >= 3:
+                monarch_performer = parts[-1].strip()
+            elif len(parts) >= 2:
+                monarch_performer = parts[-1].strip()
+            continue  # Don't add as separate scraped event
+
+        # Seaside Sessions extraction
+        if "seaside sessions" in title_lower:
+            # "Seaside Sessions – Ben Powell" or "Seaside Sessions: Ben Powell (genre)"
+            for sep in ["–", ":", "-"]:
+                if sep in title:
+                    seaside_performer = title.split(sep, 1)[-1].strip()
+                    break
+            continue  # Don't add as separate scraped event
+
+        # Dedupe same artist on same date
+        artist_key = re.sub(r'\s*[-–—:].+', '', title_lower).strip()
+        if artist_key in seen_artists:
+            continue
+        seen_artists.add(artist_key)
+
+        other_scraped.append(ev)
+
+    scraped_for_area = other_scraped
+
+    # Score all venues with today's events, enriching with scraped performer data
     candidates = []
     for venue in VENUES:
         if venue["area"] not in allowed_areas:
@@ -279,13 +324,22 @@ def generate_plan(today=None, home_area=None, zones=None):
         if not day_events:
             continue
         event = day_events[0]
+
+        # Enrich Monarch with real performer name from scrape
+        event_type = event["type"]
+        if venue["name"] == "Monarch Ocean Pub" and monarch_performer:
+            event_type = monarch_performer
+        # Enrich Del Mar Plaza Seaside Sessions with performer
+        if venue["name"] == "Del Mar Plaza" and seaside_performer:
+            event_type = f"Seaside Sessions: {seaside_performer}"
+
         score, reason = score_venue(venue, event)
         grade = grade_for(score)
         candidates.append({
             "venue": venue["name"],
             "area": venue["area"],
             "time": event["time"],
-            "event_type": event["type"],
+            "event_type": event_type,
             "score": score,
             "grade": grade,
             "decision": decision_for(grade),
@@ -297,7 +351,7 @@ def generate_plan(today=None, home_area=None, zones=None):
 
     candidates.sort(key=lambda x: x["score"], reverse=True)
 
-    # Featured venue notes (always included)
+    # Featured venue notes (always included), enriched with scraped data
     featured_notes = {}
     for fname in FEATURED_VENUES:
         lookup_names = FEATURED_VENUE_LOOKUPS.get(fname, [fname])
@@ -309,7 +363,12 @@ def generate_plan(today=None, home_area=None, zones=None):
             day_events = [e for e in venue_data["events"] if e["day"] == day_name]
             if day_events:
                 ev = day_events[0]
-                notes.append(f"{ev['type']} — {ev['time']}")
+                event_desc = ev["type"]
+                if lname == "Monarch Ocean Pub" and monarch_performer:
+                    event_desc = monarch_performer
+                if lname == "Del Mar Plaza" and seaside_performer:
+                    event_desc = f"Seaside Sessions: {seaside_performer}"
+                notes.append(f"{event_desc} — {ev['time']}")
         if notes:
             featured_notes[fname] = " + ".join(notes)
         else:
@@ -319,36 +378,6 @@ def generate_plan(today=None, home_area=None, zones=None):
     area_str = home_area
     if zones:
         area_str = f"{home_area} / {' / '.join(zones[:2])}"
-
-    # Load scraped events for today
-    scraped = load_scraped_events(today)
-    scraped_for_area = [e for e in scraped if e.get("area") in allowed_areas]
-
-    # Filter out scraped events that are actually static venue acts listed under
-    # a parent venue (e.g., Del Mar Plaza listing "Monarch Ocean Pub – Lee Melton"
-    # when Monarch is already a static venue with its own entry).
-    static_venue_names = {v["name"].lower() for v in VENUES}
-    filtered_scraped = []
-    seen_artists = set()
-    for ev in scraped_for_area:
-        title_lower = ev.get("title", "").lower()
-
-        # Skip if the scraped event title mentions a static venue by name
-        # (it's a duplicate listing from a parent venue's calendar)
-        if any(vname in title_lower for vname in static_venue_names):
-            continue
-
-        # Dedupe same artist on same date (e.g., two Belly Up listings for
-        # "Adam Carolla" — podcast taping + stand up show = same night)
-        # Use first significant word(s) of title as artist key
-        artist_key = re.sub(r'\s*[-–—:].+', '', title_lower).strip()
-        if artist_key in seen_artists:
-            continue
-        seen_artists.add(artist_key)
-
-        filtered_scraped.append(ev)
-
-    scraped_for_area = filtered_scraped
 
     # Scraped events as candidates (score them generously — they're real, timely data)
     scraped_candidates = []
