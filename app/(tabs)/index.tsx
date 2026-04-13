@@ -87,7 +87,11 @@ export default function HomeScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.header}>{todayName()}</Text>
+      <Text style={styles.header}>
+        {new Date().getHours() >= 22
+          ? `Tomorrow · ${todayName(new Date(Date.now() + 86400000))}`
+          : todayName()}
+      </Text>
       <Text style={styles.dim}>
         {prefs.homeArea} · {prefs.enabledZones.length} nearby zones · {state.plan === 'paid' ? 'Paid plan' : 'Free plan'}
       </Text>

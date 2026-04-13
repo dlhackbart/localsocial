@@ -94,11 +94,30 @@ export async function loadEvents(
     if (cached) return mergeAndDedupe(cached.events, sampleNow);
   }
 
-  const sources = await resolveSourcesForArea(areaLabel);
-  const fetched: LocalEvent[] = [];
-  for (const src of sources) {
-    const events = await fetchSource(src);
-    fetched.push(...events);
+  // Fetch live sources with a timeout — always fall back to samples
+  let fetched: LocalEvent[] = [];
+  try {
+    const fetchWithTimeout = new Promise<LocalEvent[]>(async (resolve) => {
+      try {
+        const sources = await resolveSourcesForArea(areaLabel);
+        const results: LocalEvent[] = [];
+        for (const src of sources) {
+          const events = await fetchSource(src);
+          results.push(...events);
+        }
+        resolve(results);
+      } catch {
+        resolve([]);
+      }
+    });
+
+    const timeout = new Promise<LocalEvent[]>((resolve) =>
+      setTimeout(() => resolve([]), 8000),
+    );
+
+    fetched = await Promise.race([fetchWithTimeout, timeout]);
+  } catch {
+    fetched = [];
   }
 
   const merged = mergeAndDedupe(fetched, sampleNow);

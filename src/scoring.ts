@@ -133,11 +133,22 @@ function isStillUpcomingToday(time: string, now: Date): boolean {
   return minutes + UPCOMING_GRACE_MINUTES >= nowMinutes;
 }
 
+// After this hour, show tomorrow's events instead of tonight's
+const NEXT_DAY_CUTOFF_HOUR = 22; // 10 PM
+
 export function getRecommendations(
   prefs: Preferences,
   events: LocalEvent[] = [],
   now: Date = new Date(),
 ): RecommendationResult {
+  // After 10 PM, shift to tomorrow — tonight's over, show what's next
+  if (now.getHours() >= NEXT_DAY_CUTOFF_HOUR) {
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(12, 0, 0, 0); // noon tomorrow so all events pass time filter
+    now = tomorrow;
+  }
+
   const day = todayName(now);
   const areas = allowedAreas(prefs);
   const categorySet = new Set(prefs.categories);
@@ -196,14 +207,16 @@ export function getRecommendations(
   const topEvent = eventCandidates[0] ?? null;
 
   if (!topVenue && !topEvent) {
-    // Was there anything earlier today that we just missed?
+    const isShowingTomorrow = new Date().getHours() >= NEXT_DAY_CUTOFF_HOUR;
     const hadEarlierToday =
       VENUES.some((v) => areas.has(v.area) && v.events.some((e) => e.day === day)) ||
       events.some((e) => areas.has(e.area) && categorySet.has(e.category) && isSameDay(e.date, now));
     return {
       topVenue: null,
       topEvent: null,
-      emptyMessage: hadEarlierToday
+      emptyMessage: isShowingTomorrow
+        ? `Nothing scheduled for tomorrow (${day}).`
+        : hadEarlierToday
         ? 'No more events tonight. Check back tomorrow.'
         : 'Nothing matching today. Try widening zones or categories.',
     };
