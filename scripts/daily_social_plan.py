@@ -505,6 +505,8 @@ def format_full_plan(plan):
 
     # Summary line
     lines.append(f"Call: {plan['call']}  |  Crowd Grade: {plan['crowd_grade']}  |  Priority: {plan['priority']}")
+    lines.append("")
+    lines.append("Log last night: https://dlhackbart.github.io/localsocial/")
 
     return "\n".join(lines)
 
@@ -539,6 +541,11 @@ def format_sms(plan):
             msg += addition
 
     msg += f" | {plan['call']}, {plan['priority']}"
+
+    # Add log link if it fits
+    log_note = " | Log: dlhackbart.github.io/localsocial"
+    if len(msg) + len(log_note) <= 160:
+        msg += log_note
 
     return msg[:160]
 
@@ -639,6 +646,8 @@ def format_weekly_plan(plans):
 
     for plan in plans[1:]:
         lines.extend(_format_day_picks(plan, is_today=False))
+
+    lines.append("Log last night: https://dlhackbart.github.io/localsocial/")
 
     return "\n".join(lines)
 
