@@ -65,6 +65,47 @@ function PickCard({ rec, rank }: { rec: Recommendation; rank: number }) {
   );
 }
 
+function FairgroundsSection({ events }: { events: ReturnType<typeof getSampleEvents> }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const upcoming = events
+    .filter((e) =>
+      (e.sourceName === 'Del Mar Fairgrounds' || e.sourceName === 'Del Mar Racetrack') &&
+      e.date >= today,
+    )
+    .slice(0, 6);
+
+  if (upcoming.length === 0) return null;
+
+  const openEvent = (title: string) => {
+    const url = title.toLowerCase().includes('racing')
+      ? 'https://www.dmtc.com'
+      : 'https://www.delmarfairgrounds.com/events';
+    Linking.openURL(url);
+  };
+
+  return (
+    <View style={styles.fairCard}>
+      <View style={styles.fairHeader}>
+        <Text style={styles.fairTitle}>Del Mar Fairgrounds</Text>
+        <Text style={styles.fairSub}>Half a mile from you</Text>
+      </View>
+      {upcoming.map((ev) => (
+        <Pressable
+          key={ev.id}
+          onPress={() => openEvent(ev.title)}
+          style={styles.fairRow}
+        >
+          <Text style={styles.fairEventDate}>{ev.date.slice(5)}</Text>
+          <View style={styles.fairEventContent}>
+            <Text style={styles.fairEventTitle}>{ev.title}</Text>
+            <Text style={styles.fairEventTime}>{ev.time}</Text>
+          </View>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 function DaySection({ plan }: { plan: DayPlan }) {
   const isTonight = plan.isTonight;
   const header = isTonight ? `Tonight — ${plan.dayName}` : plan.dayName;
@@ -125,6 +166,9 @@ export default function HomeScreen() {
           </Text>
         </View>
       )}
+
+      {/* Del Mar Fairgrounds upcoming — 1/2 mile from home */}
+      <FairgroundsSection events={events} />
 
       {weeklyPlan.map((plan) => (
         <DaySection key={plan.date} plan={plan} />
@@ -258,6 +302,52 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
+  fairCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    borderWidth: 2,
+    borderColor: colors.maybe, // gold-ish border for prominence
+    gap: spacing.xs,
+  },
+  fairHeader: {
+    marginBottom: spacing.sm,
+  },
+  fairTitle: {
+    color: colors.maybe,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  fairSub: {
+    color: colors.textDim,
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
+  fairRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingVertical: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  fairEventDate: {
+    color: colors.maybe,
+    fontWeight: '700',
+    fontSize: 14,
+    width: 50,
+  },
+  fairEventContent: {
+    flex: 1,
+  },
+  fairEventTitle: {
+    color: colors.text,
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  fairEventTime: {
+    color: colors.textDim,
+    fontSize: 12,
+  },
   hhBanner: {
     backgroundColor: colors.go,
     padding: spacing.md,

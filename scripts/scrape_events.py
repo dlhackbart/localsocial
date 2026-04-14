@@ -508,6 +508,113 @@ def _is_big_la_paloma(title: str) -> bool:
     ])
 
 
+# ─── Del Mar Fairgrounds ──────────────────────────────────────────────────────
+
+def scrape_fairgrounds() -> list[dict]:
+    """Del Mar Fairgrounds: SD County Fair, Toyota Summer Concert Series, racing.
+
+    Fairgrounds site uses dynamic JS loading — can't scrape via urllib.
+    Known schedule maintained here, refreshed periodically.
+
+    The Fairgrounds is HALF A MILE from the user's home — every event here
+    is local and prominent. All events flagged big_event=True.
+    """
+    today = date.today()
+    events = []
+
+    # ─── San Diego County Fair 2026 (June 10 - July 5) ────────────────────
+    # Wednesday through Sunday only (closed Mon/Tue)
+    fair_start = date(2026, 6, 10)
+    fair_end = date(2026, 7, 5)
+    current = fair_start
+    while current <= fair_end:
+        # Only Wed-Sun
+        if current.weekday() < 5 or current.weekday() == 6:  # Mon=0..Sun=6; open Wed,Thu,Fri,Sat,Sun
+            if current.weekday() in (2, 3, 4, 5, 6):
+                if current >= today and (current - today).days <= LOOKAHEAD_DAYS:
+                    events.append({
+                        "title": "San Diego County Fair",
+                        "date": current.isoformat(),
+                        "time": "11:00 AM - 11:00 PM",
+                        "venue": "Del Mar Fairgrounds",
+                        "area": "Del Mar",
+                        "source": "sdfair.com",
+                        "category": "markets",
+                        "big_event": True,
+                    })
+        current = date.fromordinal(current.toordinal() + 1)
+
+    # ─── Toyota Summer Concert Series 2026 ────────────────────────────────
+    concerts = [
+        ("2026-06-10", "Chicago (Grandstand)", "7:30 PM"),
+        ("2026-06-12", "Koe Wetzel (Grandstand)", "7:30 PM"),
+        ("2026-06-14", "Los Tucanes de Tijuana (Grandstand)", "7:30 PM"),
+        ("2026-06-19", "Marshmello (Grandstand)", "7:30 PM"),
+        ("2026-06-20", "Good Charlotte (Grandstand)", "7:30 PM"),
+        ("2026-06-21", "Pancho Barraza & Banda Machos (Grandstand)", "7:30 PM"),
+        ("2026-06-25", "Nelly (Grandstand)", "7:30 PM"),
+        ("2026-06-26", "Maren Morris (Grandstand)", "7:30 PM"),
+        ("2026-06-28", "El Coyote & Chuy Lizárraga (Grandstand)", "7:30 PM"),
+        ("2026-07-01", "AJR (Grandstand)", "7:30 PM"),
+        ("2026-07-05", "Conjunto Primavera (Grandstand)", "7:30 PM"),
+    ]
+    for d_str, artist, time_str in concerts:
+        try:
+            ed = date.fromisoformat(d_str)
+            if ed < today or (ed - today).days > LOOKAHEAD_DAYS:
+                continue
+            events.append({
+                "title": artist,
+                "date": d_str,
+                "time": time_str,
+                "venue": "Del Mar Fairgrounds",
+                "area": "Del Mar",
+                "source": "sdfair.com",
+                "category": "live_music_small",
+                "big_event": True,
+            })
+        except ValueError:
+            continue
+
+    # ─── Del Mar Thoroughbred Club Racing ─────────────────────────────────
+    # 2026 Summer Meet: opens Friday July 17
+    # Racing is typically Thu-Sun during the season
+    racing_start = date(2026, 7, 17)
+    racing_end = date(2026, 9, 6)  # Labor Day typical close
+
+    if racing_start >= today and (racing_start - today).days <= LOOKAHEAD_DAYS:
+        events.append({
+            "title": "Del Mar Racing — Opening Day",
+            "date": racing_start.isoformat(),
+            "time": "2:00 PM",
+            "venue": "Del Mar Racetrack",
+            "area": "Del Mar",
+            "source": "dmtc.com",
+            "category": "meetups_clubs",
+            "big_event": True,
+        })
+
+    # Regular race days through the season (Thu-Sun)
+    current = racing_start
+    while current <= racing_end:
+        if current.weekday() in (3, 4, 5, 6):  # Thu=3, Fri=4, Sat=5, Sun=6
+            if current >= today and (current - today).days <= LOOKAHEAD_DAYS:
+                if current != racing_start:  # Opening Day already added
+                    events.append({
+                        "title": "Del Mar Racing",
+                        "date": current.isoformat(),
+                        "time": "2:00 PM" if current.weekday() == 4 else "2:00 PM",
+                        "venue": "Del Mar Racetrack",
+                        "area": "Del Mar",
+                        "source": "dmtc.com",
+                        "category": "meetups_clubs",
+                        "big_event": True,
+                    })
+        current = date.fromordinal(current.toordinal() + 1)
+
+    return events
+
+
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def scrape_all() -> list[dict]:
@@ -531,6 +638,9 @@ def scrape_all() -> list[dict]:
 
     print("[SCRAPE] La Paloma Theatre...")
     all_events.extend(scrape_la_paloma())
+
+    print("[SCRAPE] Del Mar Fairgrounds...")
+    all_events.extend(scrape_fairgrounds())
 
     # Dedupe by title + date
     seen = set()

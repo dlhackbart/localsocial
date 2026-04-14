@@ -134,8 +134,123 @@ function nextOccurrence(day: DayName, from: Date = new Date()): string {
   return d.toISOString().slice(0, 10);
 }
 
+// ─── Del Mar Fairgrounds Events (fixed dates, 1/2 mile from home) ──────────
+// San Diego County Fair: June 10 - July 5, 2026 (Wed-Sun)
+// Toyota Summer Concert Series: specific dates during fair
+// Del Mar Thoroughbred Club: July 17 - Sep 6 (Thu-Sun)
+
+interface FixedEvent {
+  title: string;
+  date: string;           // ISO YYYY-MM-DD
+  time: string;
+  area: string;
+  category: LocalEvent['category'];
+  sourceName: string;
+  description?: string;
+  big?: boolean;
+}
+
+const FAIRGROUNDS_EVENTS: FixedEvent[] = [
+  // Toyota Summer Concert Series
+  { title: 'Chicago (Grandstand)', date: '2026-06-10', time: '7:30 PM', area: 'Del Mar', category: 'live_music_small', sourceName: 'Del Mar Fairgrounds', big: true },
+  { title: 'Koe Wetzel (Grandstand)', date: '2026-06-12', time: '7:30 PM', area: 'Del Mar', category: 'live_music_small', sourceName: 'Del Mar Fairgrounds', big: true },
+  { title: 'Los Tucanes de Tijuana (Grandstand)', date: '2026-06-14', time: '7:30 PM', area: 'Del Mar', category: 'live_music_small', sourceName: 'Del Mar Fairgrounds', big: true },
+  { title: 'Marshmello (Grandstand)', date: '2026-06-19', time: '7:30 PM', area: 'Del Mar', category: 'live_music_small', sourceName: 'Del Mar Fairgrounds', big: true },
+  { title: 'Good Charlotte (Grandstand)', date: '2026-06-20', time: '7:30 PM', area: 'Del Mar', category: 'live_music_small', sourceName: 'Del Mar Fairgrounds', big: true },
+  { title: 'Nelly (Grandstand)', date: '2026-06-25', time: '7:30 PM', area: 'Del Mar', category: 'live_music_small', sourceName: 'Del Mar Fairgrounds', big: true },
+  { title: 'Maren Morris (Grandstand)', date: '2026-06-26', time: '7:30 PM', area: 'Del Mar', category: 'live_music_small', sourceName: 'Del Mar Fairgrounds', big: true },
+  { title: 'AJR (Grandstand)', date: '2026-07-01', time: '7:30 PM', area: 'Del Mar', category: 'live_music_small', sourceName: 'Del Mar Fairgrounds', big: true },
+  // Del Mar Racing Opening Day
+  { title: 'Del Mar Racing — Opening Day', date: '2026-07-17', time: '2:00 PM', area: 'Del Mar', category: 'meetups_clubs', sourceName: 'Del Mar Racetrack', description: 'Opening Day festivities, Hats Contest, Seabiscuit Society', big: true },
+];
+
+function getFairgroundsEvents(from: Date): LocalEvent[] {
+  const today = from.toISOString().slice(0, 10);
+  const out: LocalEvent[] = [];
+
+  // Fixed-date events
+  for (const fe of FAIRGROUNDS_EVENTS) {
+    if (fe.date < today) continue;
+    out.push({
+      id: `fair_${fe.date}_${fe.title.slice(0, 20)}`,
+      title: fe.title,
+      area: fe.area,
+      date: fe.date,
+      time: fe.time,
+      category: fe.category,
+      description: fe.description,
+      source: 'sample',
+      sourceName: fe.sourceName,
+      intimate: false,
+      conversationFriendly: false,
+      repeatFriendly: false,
+      broadAppeal: true,
+    });
+  }
+
+  // San Diego County Fair: June 10 - July 5, Wed-Sun
+  const fairStart = new Date('2026-06-10');
+  const fairEnd = new Date('2026-07-05');
+  const d = new Date(Math.max(from.getTime(), fairStart.getTime()));
+  while (d <= fairEnd) {
+    const dow = d.getDay(); // 0=Sun
+    // Wed=3, Thu=4, Fri=5, Sat=6, Sun=0
+    if (dow === 0 || dow >= 3) {
+      const iso = d.toISOString().slice(0, 10);
+      out.push({
+        id: `countyfair_${iso}`,
+        title: 'San Diego County Fair',
+        area: 'Del Mar',
+        date: iso,
+        time: '11:00 AM - 11:00 PM',
+        category: 'markets',
+        description: 'SD County Fair at Del Mar Fairgrounds',
+        source: 'sample',
+        sourceName: 'Del Mar Fairgrounds',
+        intimate: false,
+        conversationFriendly: true,
+        repeatFriendly: false,
+        broadAppeal: true,
+      });
+    }
+    d.setDate(d.getDate() + 1);
+  }
+
+  // Del Mar Racing: July 17 - Sep 6, Thu-Sun
+  const raceStart = new Date('2026-07-17');
+  const raceEnd = new Date('2026-09-06');
+  const rd = new Date(Math.max(from.getTime(), raceStart.getTime()));
+  while (rd <= raceEnd) {
+    const dow = rd.getDay();
+    if (dow === 0 || dow >= 4) {  // Thu=4, Fri=5, Sat=6, Sun=0
+      const iso = rd.toISOString().slice(0, 10);
+      // Skip if already added (opening day)
+      if (iso !== '2026-07-17') {
+        out.push({
+          id: `racing_${iso}`,
+          title: 'Del Mar Racing',
+          area: 'Del Mar',
+          date: iso,
+          time: '2:00 PM',
+          category: 'meetups_clubs',
+          description: 'Horse racing at Del Mar Thoroughbred Club',
+          source: 'sample',
+          sourceName: 'Del Mar Racetrack',
+          intimate: false,
+          conversationFriendly: true,
+          repeatFriendly: true,
+          broadAppeal: true,
+        });
+      }
+    }
+    rd.setDate(rd.getDate() + 1);
+  }
+
+  return out;
+}
+
 export function getSampleEvents(from: Date = new Date()): LocalEvent[] {
-  return SEEDS.map((s, i) => ({
+  const weekly = SEEDS.map((s, i) => ({
     id: `sample_${i}`,
     title: s.title,
     area: s.area,
@@ -143,11 +258,13 @@ export function getSampleEvents(from: Date = new Date()): LocalEvent[] {
     time: s.time,
     category: s.category,
     description: s.description,
-    source: 'sample',
+    source: 'sample' as const,
     sourceName: s.sourceName,
     intimate: s.intimate ?? true,
     conversationFriendly: s.conversationFriendly ?? true,
     repeatFriendly: s.repeatFriendly ?? false,
     broadAppeal: s.broadAppeal ?? true,
   }));
+
+  return [...weekly, ...getFairgroundsEvents(from)];
 }

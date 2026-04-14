@@ -6,6 +6,18 @@ import { Venue } from '../types';
 export const VENUES: Venue[] = [
   // ---------- Del Mar ----------
   {
+    name: 'Del Mar Fairgrounds',
+    area: 'Del Mar',
+    repeatFriendly: false,
+    conversationFriendly: false,
+    energy: 'high',
+    infoUrl: 'https://www.delmarfairgrounds.com/events',
+    events: [
+      // Placeholder — real events come from the scraper (County Fair,
+      // Toyota Concert Series, Del Mar Racing). Static fallback empty.
+    ],
+  },
+  {
     name: 'Monarch Ocean Pub',
     area: 'Del Mar',
     repeatFriendly: true,

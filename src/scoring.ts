@@ -98,6 +98,14 @@ function scoreLocalEvent(
 
   score += 5; // event exists
 
+  // Fairgrounds / Racetrack — 1/2 mile from home, always prioritize
+  const isFairgrounds = ev.sourceName === 'Del Mar Fairgrounds' ||
+                        ev.sourceName === 'Del Mar Racetrack';
+  if (isFairgrounds) {
+    score += 4;
+    reasons.push('Right in your backyard');
+  }
+
   if (ev.intimate) {
     score += 2;
     reasons.push('Small intimate gathering');
@@ -106,7 +114,7 @@ function scoreLocalEvent(
   const wantConversation = goal === 'dating' || goal === 'both';
   if (ev.conversationFriendly && wantConversation) {
     score += 3;
-    reasons.push('Strong for conversation');
+    if (reasons.length === 0) reasons.push('Strong for conversation');
   }
 
   if (ev.repeatFriendly) {
@@ -116,8 +124,8 @@ function scoreLocalEvent(
 
   if (ev.broadAppeal) score += 1;
 
-  if (goal === 'dating' && !ev.repeatFriendly) score -= 1;
-  if (vibe === 'quiet' && !ev.intimate) score -= 1;
+  if (goal === 'dating' && !ev.repeatFriendly && !isFairgrounds) score -= 1;
+  if (vibe === 'quiet' && !ev.intimate && !isFairgrounds) score -= 1;
 
   return { score, reason: reasons[0] ?? 'Good local option' };
 }

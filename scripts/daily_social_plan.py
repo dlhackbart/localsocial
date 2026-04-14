@@ -411,6 +411,14 @@ def generate_plan(today=None, home_area=None, zones=None):
         if ev.get("venue") in ("Belly Up Tavern", "Del Mar Plaza"):
             score += 1
 
+        # DEL MAR FAIRGROUNDS: 1/2 mile from home — always prioritize
+        if "fairgrounds" in ev.get("venue", "").lower() or ev.get("venue") == "Del Mar Racetrack":
+            score += 3
+            if not reasons:
+                reasons.append("Right in your backyard")
+            elif "backyard" not in reasons[0].lower():
+                reasons[0] = f"{reasons[0]} — local to you"
+
         grade = grade_for(score)
         scraped_candidates.append({
             "venue": ev.get("venue", "Unknown"),
