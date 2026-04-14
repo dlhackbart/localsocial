@@ -373,7 +373,6 @@ export function getDayPicks(
   // Top 5 picks
   const picks = all.slice(0, 5);
 
-  const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
   const isTonight = dateStr === todayStr ||
     (now.getHours() >= NEXT_DAY_CUTOFF_HOUR && dateStr === new Date(Date.now() + 86400000).toISOString().slice(0, 10));
