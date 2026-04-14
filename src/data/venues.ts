@@ -90,7 +90,62 @@ export const VENUES: Venue[] = [
     ],
   },
 
+  // Upscale bar — nice crowd, conversational, full service resort
+  {
+    name: 'Kitchen 1540 (L\'Auberge)',
+    area: 'Del Mar',
+    repeatFriendly: true,
+    conversationFriendly: true,
+    energy: 'medium',
+    infoUrl: 'https://www.laubergedelmar.com/dining/kitchen-1540',
+    happyHour: {
+      days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      start: '3:00 PM',
+      end: '6:00 PM',
+      details: 'Upscale resort bar, craft cocktails, light food',
+    },
+    events: [
+      { day: 'Thursday', type: 'live music', time: '6-9 PM', broadAppeal: true },
+      { day: 'Friday', type: 'live music', time: '6-9 PM', broadAppeal: true },
+      { day: 'Saturday', type: 'live music', time: '6-9 PM', broadAppeal: true },
+    ],
+  },
+  // Oceanfront classic, HH favorite, patio crowd
+  {
+    name: 'Poseidon Del Mar',
+    area: 'Del Mar',
+    repeatFriendly: true,
+    conversationFriendly: true,
+    energy: 'medium',
+    infoUrl: 'https://maps.google.com/?q=Poseidon+Del+Mar',
+    happyHour: {
+      days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      start: '3:00 PM',
+      end: '6:00 PM',
+      details: 'Right on the sand, massive patio, regular HH crowd',
+    },
+    events: [
+      { day: 'Saturday', type: 'sunset on the sand', time: '4-7 PM', broadAppeal: true },
+      { day: 'Sunday', type: 'beach brunch', time: '10 AM-2 PM', broadAppeal: true },
+    ],
+  },
+
   // ---------- Solana Beach ----------
+  // Neighborhood beach bar above Fletcher Cove — locals spot
+  {
+    name: 'Pillbox Tavern',
+    area: 'Solana Beach',
+    repeatFriendly: true,
+    conversationFriendly: true,
+    energy: 'medium',
+    infoUrl: 'https://www.pillboxtavern.com',
+    events: [
+      { day: 'Monday', type: 'Burger Mondays ($17 burger + brew)', time: '5-9 PM', broadAppeal: true },
+      { day: 'Friday', type: 'Fletcher Cove locals', time: '4-9 PM', broadAppeal: true },
+      { day: 'Saturday', type: 'weekend brunch crowd', time: '10 AM-3 PM', broadAppeal: true },
+      { day: 'Sunday', type: 'weekend brunch crowd', time: '10 AM-3 PM', broadAppeal: true },
+    ],
+  },
   {
     name: 'Belly Up Tavern',
     area: 'Solana Beach',
@@ -107,6 +162,44 @@ export const VENUES: Venue[] = [
   },
 
   // ---------- Encinitas ----------
+  // Wine bar — known for conversation + regulars. Great dating spot.
+  {
+    name: 'The Third Corner',
+    area: 'Encinitas',
+    repeatFriendly: true,
+    conversationFriendly: true,
+    energy: 'medium',
+    infoUrl: 'https://maps.google.com/?q=Third+Corner+Encinitas',
+    happyHour: {
+      days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      start: '3:00 PM',
+      end: '6:00 PM',
+      details: 'Wine bar + tastings, quiet enough to actually talk',
+    },
+    events: [
+      { day: 'Tuesday', type: 'wine tasting', time: '6-8 PM', broadAppeal: true },
+      { day: 'Thursday', type: 'wine tasting', time: '6-8 PM', broadAppeal: true },
+      { day: 'Saturday', type: 'afternoon pours', time: '2-5 PM', broadAppeal: true },
+    ],
+  },
+  // Daytime coffee — dog walkers, yoga crowd, quality singles
+  {
+    name: 'Lofty Coffee',
+    area: 'Encinitas',
+    repeatFriendly: true,
+    conversationFriendly: true,
+    energy: 'low',
+    infoUrl: 'https://maps.google.com/?q=Lofty+Coffee+Encinitas',
+    events: [
+      { day: 'Monday', type: 'morning regulars', time: '7-10 AM', broadAppeal: true },
+      { day: 'Tuesday', type: 'morning regulars', time: '7-10 AM', broadAppeal: true },
+      { day: 'Wednesday', type: 'morning regulars', time: '7-10 AM', broadAppeal: true },
+      { day: 'Thursday', type: 'morning regulars', time: '7-10 AM', broadAppeal: true },
+      { day: 'Friday', type: 'morning regulars', time: '7-10 AM', broadAppeal: true },
+      { day: 'Saturday', type: 'weekend crowd', time: '8 AM-12 PM', broadAppeal: true },
+      { day: 'Sunday', type: 'weekend crowd', time: '8 AM-12 PM', broadAppeal: true },
+    ],
+  },
   {
     name: 'Union Kitchen & Tap',
     area: 'Encinitas',

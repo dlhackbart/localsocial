@@ -71,6 +71,58 @@ VENUES = [
         ],
     },
     {
+        "name": "Kitchen 1540 (L'Auberge)", "area": "Del Mar",
+        "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
+        "happyHour": {"days": ["Monday","Tuesday","Wednesday","Thursday","Friday"], "start": "3:00 PM", "end": "6:00 PM"},
+        "events": [
+            {"day": "Thursday", "type": "live music", "time": "6-9 PM", "broadAppeal": True},
+            {"day": "Friday", "type": "live music", "time": "6-9 PM", "broadAppeal": True},
+            {"day": "Saturday", "type": "live music", "time": "6-9 PM", "broadAppeal": True},
+        ],
+    },
+    {
+        "name": "Poseidon Del Mar", "area": "Del Mar",
+        "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
+        "happyHour": {"days": ["Monday","Tuesday","Wednesday","Thursday","Friday"], "start": "3:00 PM", "end": "6:00 PM"},
+        "events": [
+            {"day": "Saturday", "type": "sunset on the sand", "time": "4-7 PM", "broadAppeal": True},
+            {"day": "Sunday", "type": "beach brunch", "time": "10 AM-2 PM", "broadAppeal": True},
+        ],
+    },
+    {
+        "name": "Pillbox Tavern", "area": "Solana Beach",
+        "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
+        "events": [
+            {"day": "Monday", "type": "Burger Mondays ($17 burger + brew)", "time": "5-9 PM", "broadAppeal": True},
+            {"day": "Friday", "type": "Fletcher Cove locals", "time": "4-9 PM", "broadAppeal": True},
+            {"day": "Saturday", "type": "weekend brunch crowd", "time": "10 AM-3 PM", "broadAppeal": True},
+            {"day": "Sunday", "type": "weekend brunch crowd", "time": "10 AM-3 PM", "broadAppeal": True},
+        ],
+    },
+    {
+        "name": "The Third Corner", "area": "Encinitas",
+        "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
+        "happyHour": {"days": ["Monday","Tuesday","Wednesday","Thursday","Friday"], "start": "3:00 PM", "end": "6:00 PM"},
+        "events": [
+            {"day": "Tuesday", "type": "wine tasting", "time": "6-8 PM", "broadAppeal": True},
+            {"day": "Thursday", "type": "wine tasting", "time": "6-8 PM", "broadAppeal": True},
+            {"day": "Saturday", "type": "afternoon pours", "time": "2-5 PM", "broadAppeal": True},
+        ],
+    },
+    {
+        "name": "Lofty Coffee", "area": "Encinitas",
+        "repeatFriendly": True, "conversationFriendly": True, "energy": "low",
+        "events": [
+            {"day": "Monday", "type": "morning regulars", "time": "7-10 AM", "broadAppeal": True},
+            {"day": "Tuesday", "type": "morning regulars", "time": "7-10 AM", "broadAppeal": True},
+            {"day": "Wednesday", "type": "morning regulars", "time": "7-10 AM", "broadAppeal": True},
+            {"day": "Thursday", "type": "morning regulars", "time": "7-10 AM", "broadAppeal": True},
+            {"day": "Friday", "type": "morning regulars", "time": "7-10 AM", "broadAppeal": True},
+            {"day": "Saturday", "type": "weekend crowd", "time": "8 AM-12 PM", "broadAppeal": True},
+            {"day": "Sunday", "type": "weekend crowd", "time": "8 AM-12 PM", "broadAppeal": True},
+        ],
+    },
+    {
         "name": "Jake's Del Mar", "area": "Del Mar",
         "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
         "happyHour": {"days": ["Monday","Tuesday","Wednesday","Thursday","Friday"], "start": "3:00 PM", "end": "6:00 PM"},
