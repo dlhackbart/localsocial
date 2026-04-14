@@ -170,43 +170,59 @@ PRIORITY_MAP = {
 
 # ─── Scoring (mirrors src/scoring.ts) ────────────────────────────────────────
 
-GOAL = "both"
-VIBE = "balanced"
+GOAL = "dating"      # Mission: meet someone, not party scene
+VIBE = "balanced"    # Quiet enough to talk, warm enough to feel alive
+
+
+MISSION_REASONS = {
+    "regulars": "Where regulars meet regulars",
+    "conversation": "Real conversation, not a shouting match",
+    "known_face": "Show up enough, become a known face",
+    "happy_hour_locals": "Happy hour = the same crowd, over and over",
+    "signal": "Signal over noise — genuine connection",
+    "backyard": "Right in your backyard",
+}
 
 
 def score_venue(venue, event, happy_hour_on_this_day=False):
-    """Score a venue+event pair. Returns (score, reason).
+    """Score a venue+event pair for 'meet my future wife' mission.
 
-    Prioritizes repeat-friendly conversational venues — the 'become a
-    regular' strategy. Energy is a smaller factor; dating goal penalizes
-    anonymous high-energy spots.
+    Priorities: conversation > repeat-friendly > happy hour. High-energy
+    loud rooms actively hurt. Goal is becoming a known face at 3-4 spots.
     """
     score = 5  # event exists
     reasons = []
 
-    # BIGGEST BOOST: places you can become a regular
+    # BIGGEST BOOSTS: conversation + repeat. The whole point.
+    if venue["conversationFriendly"]:
+        score += 4
+        reasons.append(MISSION_REASONS["conversation"])
+
     if venue["repeatFriendly"]:
         score += 4
-        reasons.append("Become a regular here")
+        if not reasons:
+            reasons.append(MISSION_REASONS["known_face"])
+        else:
+            reasons.append(MISSION_REASONS["regulars"])
 
-    if venue["conversationFriendly"]:
-        score += 3
-        reasons.append("Conversation-friendly")
+    # Sweet spot: both
+    if venue["conversationFriendly"] and venue["repeatFriendly"]:
+        score += 2
+        reasons[0] = MISSION_REASONS["regulars"]
 
-    # Happy hour + regular-friendly = prime time
+    # Happy hour + repeat = prime time
     if happy_hour_on_this_day and venue["repeatFriendly"]:
         score += 2
         if not reasons:
-            reasons.append("Happy hour regulars")
+            reasons.append(MISSION_REASONS["happy_hour_locals"])
 
-    # Energy: prefer medium (conversational) over high
+    # Energy: prefer medium; high-energy hurts dating goal
     if venue["energy"] == "medium":
         score += 1
     elif venue["energy"] == "high":
+        score -= 3
         if GOAL == "social":
-            score += 1
-        if GOAL == "dating":
-            score -= 2
+            score += 4  # neutralize for explicit social mode
 
     if event["broadAppeal"]:
         score += 1
@@ -219,13 +235,13 @@ def score_venue(venue, event, happy_hour_on_this_day=False):
     if VIBE == "high" and venue["energy"] == "low":
         score -= 2
 
-    # Dating penalties
+    # Dating penalties — missing these is a dealbreaker
     if GOAL == "dating" and not venue["repeatFriendly"]:
         score -= 3
     if GOAL == "dating" and not venue["conversationFriendly"]:
-        score -= 2
+        score -= 3
 
-    return score, reasons[0] if reasons else "Decent local option"
+    return score, reasons[0] if reasons else MISSION_REASONS["signal"]
 
 
 def grade_for(score):
@@ -466,6 +482,19 @@ def generate_plan(today=None, home_area=None, zones=None):
             continue
         seen_locations.add(location_key)
         deduped.append(c)
+
+    # Rotation: within 2 pts of top score, cycle who's #1 each day
+    # Strategy: become a regular at 3-4 spots, not one
+    if len(deduped) > 1:
+        top_score = deduped[0]["score"]
+        top_tier = [c for c in deduped if top_score - c["score"] <= 2]
+        if len(top_tier) > 1:
+            day_of_year = today.timetuple().tm_yday
+            rotation_idx = day_of_year % len(top_tier)
+            rotated_top = top_tier[rotation_idx]
+            others_in_tier = [c for c in top_tier if c is not rotated_top]
+            rest = [c for c in deduped if c not in top_tier]
+            deduped = [rotated_top] + others_in_tier + rest
 
     # Top 5 picks (or fewer if not enough candidates)
     MAX_PICKS = 5

@@ -34,6 +34,19 @@ function parseTimeToMinutes(s: string): number | null {
   return h * 60 + mm;
 }
 
+// Mission-focused reasons for the "meet my future wife" use case.
+// These beat generic "high social energy" language.
+const MISSION_REASONS = {
+  regularsMeetRegulars: 'Where regulars meet regulars',
+  organicConversation: 'Real conversation, not a shouting match',
+  knownFace: 'Show up enough, become a known face',
+  quieterSignal: 'Signal over noise — genuine connection',
+  happyHourLocals: 'Happy hour = the same crowd, over and over',
+  weeknightLocals: 'Weeknight locals, not tourists',
+  fairgroundsBackyard: 'Right in your backyard',
+  sunsetMixer: 'Sunset + drinks + familiar faces',
+} as const;
+
 function scoreVenueEvent(
   venue: Venue,
   event: VenueEvent,
@@ -47,31 +60,39 @@ function scoreVenueEvent(
   // Core: event exists
   score += 5;
 
-  // BIGGEST BOOST: places you can become a regular.
-  // Goal is casual dating via familiarity, not the hot scene.
+  // BIGGEST BOOST: conversation + repeat. This is the whole point.
+  if (venue.conversationFriendly) {
+    score += 4;
+    reasons.push(MISSION_REASONS.organicConversation);
+  }
+
   if (venue.repeatFriendly) {
     score += 4;
-    reasons.push('Become a regular here');
+    if (reasons.length === 0) reasons.push(MISSION_REASONS.knownFace);
+    else reasons.push(MISSION_REASONS.regularsMeetRegulars);
   }
 
-  if (venue.conversationFriendly) {
-    score += 3;
-    reasons.push('Conversation-friendly');
+  // Both = the sweet spot
+  if (venue.conversationFriendly && venue.repeatFriendly) {
+    score += 2;
+    // Replace the reason with the strongest one
+    reasons[0] = MISSION_REASONS.regularsMeetRegulars;
   }
 
-  // Happy hour on this day = a time when regulars naturally gather
+  // Happy hour + repeat-friendly = prime time (same regulars, repeatable)
   if (happyHourOnThisDay && venue.repeatFriendly) {
     score += 2;
-    if (reasons.length === 0) reasons.push('Happy hour regulars');
+    if (reasons.length === 0) reasons.push(MISSION_REASONS.happyHourLocals);
   }
 
-  // Energy is now a smaller factor — prefer medium (conversational) over high
+  // Energy: strongly prefer medium. High energy hurts the mission.
   if (venue.energy === 'medium') {
     score += 1;
   } else if (venue.energy === 'high') {
-    // high energy venues work for "social" goal but hurt for dating
-    if (goal === 'social') score += 1;
-    if (goal === 'dating') score -= 2;
+    // High-energy loud rooms don't build connections
+    score -= 3;
+    // But it's fine for a "social" goal
+    if (goal === 'social') score += 4; // cancels the penalty for social mode
   }
 
   if (event.broadAppeal) score += 1;
@@ -83,9 +104,9 @@ function scoreVenueEvent(
 
   // Dating penalties — missing regulars or conversation is a dealbreaker
   if (goal === 'dating' && !venue.repeatFriendly) score -= 3;
-  if (goal === 'dating' && !venue.conversationFriendly) score -= 2;
+  if (goal === 'dating' && !venue.conversationFriendly) score -= 3;
 
-  return { score, reason: reasons[0] ?? 'Decent local option' };
+  return { score, reason: reasons[0] ?? MISSION_REASONS.quieterSignal };
 }
 
 function scoreLocalEvent(
@@ -377,6 +398,29 @@ export function getDayPicks(
   }
 
   all.sort((a, b) => b.score - a.score);
+
+  // Rotation: among venues within 2 points of the top score, rotate who's #1
+  // so you're not shown the same venue every day. Strategy: become a regular
+  // at 3-4 spots, not just one. Deterministic by date so notifications are
+  // stable if you open the app mid-day.
+  if (all.length > 1) {
+    const topScore = all[0].score;
+    const topTier = all.filter((c) => topScore - c.score <= 2);
+    if (topTier.length > 1) {
+      // Seed rotation by day-of-year so it cycles naturally through the week
+      const dayOfYear = Math.floor(
+        (targetDate.getTime() - new Date(targetDate.getFullYear(), 0, 0).getTime()) / 86400000,
+      );
+      const rotationIdx = dayOfYear % topTier.length;
+      // Move the rotation pick to the front
+      const rotated = [
+        topTier[rotationIdx],
+        ...topTier.filter((_, i) => i !== rotationIdx),
+        ...all.filter((c) => !topTier.includes(c)),
+      ];
+      all.splice(0, all.length, ...rotated);
+    }
+  }
 
   // Top 5 picks
   const picks = all.slice(0, 5);
