@@ -44,6 +44,7 @@ VENUES = [
     {
         "name": "Monarch Ocean Pub", "area": "Del Mar",
         "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
+        "happyHour": {"days": ["Tuesday","Wednesday","Thursday","Friday"], "start": "4:00 PM", "end": "6:00 PM"},
         "events": [
             {"day": "Wednesday", "type": "acoustic", "time": "4-7 PM", "broadAppeal": True},
             {"day": "Thursday", "type": "acoustic", "time": "4-7 PM", "broadAppeal": True},
@@ -63,6 +64,7 @@ VENUES = [
     {
         "name": "Jake's Del Mar", "area": "Del Mar",
         "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
+        "happyHour": {"days": ["Monday","Tuesday","Wednesday","Thursday","Friday"], "start": "3:00 PM", "end": "6:00 PM"},
         "events": [
             {"day": "Friday", "type": "happy hour", "time": "4-6 PM", "broadAppeal": True},
             {"day": "Saturday", "type": "sunset crowd", "time": "5-8 PM", "broadAppeal": True},
@@ -82,6 +84,7 @@ VENUES = [
     {
         "name": "Union Kitchen & Tap", "area": "Encinitas",
         "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
+        "happyHour": {"days": ["Monday","Tuesday","Wednesday","Thursday","Friday"], "start": "3:00 PM", "end": "5:00 PM"},
         "events": [
             {"day": "Wednesday", "type": "happy hour", "time": "5-7 PM", "broadAppeal": True},
             {"day": "Thursday", "type": "happy hour", "time": "5-7 PM", "broadAppeal": True},
@@ -106,6 +109,7 @@ VENUES = [
     {
         "name": "1st Street Bar", "area": "Encinitas",
         "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
+        "happyHour": {"days": ["Monday","Tuesday","Wednesday","Thursday","Friday"], "start": "3:00 PM", "end": "6:00 PM"},
         "events": [
             {"day": "Tuesday", "type": "neighborhood night", "time": "7-10 PM", "broadAppeal": True},
             {"day": "Thursday", "type": "neighborhood night", "time": "7-10 PM", "broadAppeal": True},
@@ -115,6 +119,7 @@ VENUES = [
     {
         "name": "Campfire", "area": "Carlsbad",
         "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
+        "happyHour": {"days": ["Tuesday","Wednesday","Thursday","Friday"], "start": "4:00 PM", "end": "6:00 PM"},
         "events": [
             {"day": "Friday", "type": "patio scene", "time": "6-9 PM", "broadAppeal": True},
             {"day": "Saturday", "type": "patio scene", "time": "6-9 PM", "broadAppeal": True},
@@ -160,45 +165,58 @@ GOAL = "both"
 VIBE = "balanced"
 
 
-def score_venue(venue, event):
-    """Score a venue+event pair. Returns (score, reason)."""
+def score_venue(venue, event, happy_hour_on_this_day=False):
+    """Score a venue+event pair. Returns (score, reason).
+
+    Prioritizes repeat-friendly conversational venues — the 'become a
+    regular' strategy. Energy is a smaller factor; dating goal penalizes
+    anonymous high-energy spots.
+    """
     score = 5  # event exists
     reasons = []
 
-    want_energy = GOAL in ("social", "both")
-    if venue["energy"] == "high" and want_energy:
-        score += 3
-        reasons.append("High social energy")
-
-    want_convo = GOAL in ("dating", "both")
-    if venue["conversationFriendly"] and want_convo:
-        score += 3
-        reasons.append("Strong for conversation")
-
+    # BIGGEST BOOST: places you can become a regular
     if venue["repeatFriendly"]:
+        score += 4
+        reasons.append("Become a regular here")
+
+    if venue["conversationFriendly"]:
+        score += 3
+        reasons.append("Conversation-friendly")
+
+    # Happy hour + regular-friendly = prime time
+    if happy_hour_on_this_day and venue["repeatFriendly"]:
         score += 2
         if not reasons:
-            reasons.append("Familiar local crowd")
+            reasons.append("Happy hour regulars")
+
+    # Energy: prefer medium (conversational) over high
+    if venue["energy"] == "medium":
+        score += 1
+    elif venue["energy"] == "high":
+        if GOAL == "social":
+            score += 1
+        if GOAL == "dating":
+            score -= 2
 
     if event["broadAppeal"]:
-        score += 2
+        score += 1
 
     if venue.get("lowSocialValue"):
         score -= 3
 
     if VIBE == "quiet" and venue["energy"] == "high":
-        score -= 2
+        score -= 3
     if VIBE == "high" and venue["energy"] == "low":
         score -= 2
-    if VIBE == "balanced" and venue["energy"] == "medium":
-        score += 1
 
+    # Dating penalties
     if GOAL == "dating" and not venue["repeatFriendly"]:
-        score -= 2
+        score -= 3
     if GOAL == "dating" and not venue["conversationFriendly"]:
         score -= 2
 
-    return score, reasons[0] if reasons else "Balanced environment"
+    return score, reasons[0] if reasons else "Decent local option"
 
 
 def grade_for(score):
@@ -298,30 +316,43 @@ def generate_plan(today=None, home_area=None, zones=None):
 
     scraped_for_area = other_scraped
 
-    # Score all venues with today's events, enriching with scraped performer data
+    # Score all venues with today's events OR happy hour on this day
     candidates = []
     for venue in VENUES:
         if venue["area"] not in allowed_areas:
             continue
         day_events = [e for e in venue["events"] if e["day"] == day_name]
-        if not day_events:
+        has_hh = venue.get("happyHour") and day_name in venue["happyHour"]["days"]
+
+        if not day_events and not has_hh:
             continue
-        event = day_events[0]
 
-        # Enrich Monarch with real performer name from scrape
-        event_type = event["type"]
-        if venue["name"] == "Monarch Ocean Pub" and monarch_performer:
-            event_type = monarch_performer
-        # Enrich Del Mar Plaza Seaside Sessions with performer
-        if venue["name"] == "Del Mar Plaza" and seaside_performer:
-            event_type = f"Seaside Sessions: {seaside_performer}"
+        # Build the event entry (use real event if available, else synthesize from HH)
+        if day_events:
+            event = day_events[0]
+            event_type = event["type"]
+            if venue["name"] == "Monarch Ocean Pub" and monarch_performer:
+                event_type = monarch_performer
+            if venue["name"] == "Del Mar Plaza" and seaside_performer:
+                event_type = f"Seaside Sessions: {seaside_performer}"
+            event_time = event["time"]
+        else:
+            hh = venue["happyHour"]
+            event = {"day": day_name, "type": "happy hour", "time": f"{hh['start']}-{hh['end']}", "broadAppeal": True}
+            event_type = "happy hour"
+            event_time = f"{hh['start']}-{hh['end']}"
 
-        score, reason = score_venue(venue, event)
+        hh_note = None
+        if has_hh:
+            hh = venue["happyHour"]
+            hh_note = f"Happy hour {hh['start']}-{hh['end']}"
+
+        score, reason = score_venue(venue, event, happy_hour_on_this_day=has_hh)
         grade = grade_for(score)
         candidates.append({
             "venue": venue["name"],
             "area": venue["area"],
-            "time": event["time"],
+            "time": event_time,
             "event_type": event_type,
             "score": score,
             "grade": grade,
@@ -330,6 +361,7 @@ def generate_plan(today=None, home_area=None, zones=None):
             "energy": venue["energy"],
             "conversationFriendly": venue["conversationFriendly"],
             "repeatFriendly": venue["repeatFriendly"],
+            "happy_hour_note": hh_note,
         })
 
     candidates.sort(key=lambda x: x["score"], reverse=True)
@@ -486,6 +518,8 @@ def format_full_plan(plan):
         big = "  *** BIG EVENT ***" if pick.get("big_event") else ""
         lines.append(f"{label}: {pick['venue']} — {pick['time']}{big}")
         lines.append(f"  {pick['event_type']}")
+        if pick.get("happy_hour_note"):
+            lines.append(f"  {pick['happy_hour_note']}")
         lines.append(f"  Crowd: {_crowd_desc(pick)}  |  Grade {pick['grade']}  |  {pick['decision']}")
         lines.append(f"  {pick['reason']}")
         lines.append("")
@@ -585,7 +619,8 @@ def _format_day_picks(plan, is_today=False):
     for i, pick in enumerate(picks):
         num = i + 1
         big = " ***" if pick.get("big_event") else ""
-        lines.append(f"  {num}. {pick['venue']} — {pick['time']}{big}")
+        hh = f"  [HH {pick['happy_hour_note'].replace('Happy hour ', '')}]" if pick.get("happy_hour_note") else ""
+        lines.append(f"  {num}. {pick['venue']} — {pick['time']}{big}{hh}")
         lines.append(f"     {pick['event_type']}")
         lines.append(f"     {_crowd_desc(pick)}  |  Grade {pick['grade']}  |  {pick['decision']}")
 

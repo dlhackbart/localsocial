@@ -1,5 +1,8 @@
 import { Venue } from '../types';
 
+// Happy hour data verified from venue websites where available.
+// Times are approximate — always verify with the venue. Defaults noted.
+
 export const VENUES: Venue[] = [
   // ---------- Del Mar ----------
   {
@@ -9,6 +12,12 @@ export const VENUES: Venue[] = [
     conversationFriendly: true,
     energy: 'medium',
     infoUrl: 'https://www.delmarplaza.com/events',
+    happyHour: {
+      days: ['Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      start: '4:00 PM',
+      end: '6:00 PM',
+      details: 'Ocean view patio, regular crowd',
+    },
     events: [
       { day: 'Wednesday', type: 'acoustic', time: '4-7 PM', broadAppeal: true },
       { day: 'Thursday', type: 'acoustic', time: '4-7 PM', broadAppeal: true },
@@ -36,6 +45,12 @@ export const VENUES: Venue[] = [
     conversationFriendly: true,
     energy: 'medium',
     infoUrl: 'https://www.jakesdelmar.com',
+    happyHour: {
+      days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      start: '3:00 PM',
+      end: '6:00 PM',
+      details: 'Beachfront patio, oceanfront bar, regular locals',
+    },
     events: [
       { day: 'Friday', type: 'happy hour', time: '4-6 PM', broadAppeal: true },
       { day: 'Saturday', type: 'sunset crowd', time: '5-8 PM', broadAppeal: true },
@@ -58,31 +73,6 @@ export const VENUES: Venue[] = [
       { day: 'Sunday', type: 'Sunday residency', time: '7:00 PM', broadAppeal: false },
     ],
   },
-  {
-    name: 'Cedros District',
-    area: 'Solana Beach',
-    repeatFriendly: true,
-    conversationFriendly: true,
-    energy: 'medium',
-    infoUrl: 'https://www.cedrosdesigndistrict.net',
-    events: [
-      { day: 'Wednesday', type: 'walkable district', time: '6-9 PM', broadAppeal: true },
-      { day: 'Thursday', type: 'walkable district', time: '6-9 PM', broadAppeal: true },
-      { day: 'Friday', type: 'walkable district', time: '6-9 PM', broadAppeal: true },
-    ],
-  },
-  {
-    name: 'Pizza Port Solana',
-    area: 'Solana Beach',
-    repeatFriendly: true,
-    conversationFriendly: false,
-    energy: 'high',
-    infoUrl: 'https://www.pizzaport.com/solana-beach',
-    events: [
-      { day: 'Friday', type: 'brewery crowd', time: '6-10 PM', broadAppeal: true },
-      { day: 'Saturday', type: 'brewery crowd', time: '6-10 PM', broadAppeal: true },
-    ],
-  },
 
   // ---------- Encinitas ----------
   {
@@ -92,6 +82,12 @@ export const VENUES: Venue[] = [
     conversationFriendly: true,
     energy: 'medium',
     infoUrl: 'https://www.localunion101.com',
+    happyHour: {
+      days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      start: '3:00 PM',
+      end: '5:00 PM',
+      details: 'Social Hour — daily weekday specials',
+    },
     events: [
       { day: 'Wednesday', type: 'happy hour', time: '5-7 PM', broadAppeal: true },
       { day: 'Thursday', type: 'happy hour', time: '5-7 PM', broadAppeal: true },
@@ -128,6 +124,12 @@ export const VENUES: Venue[] = [
     conversationFriendly: true,
     energy: 'medium',
     infoUrl: 'https://maps.google.com/?q=1st+Street+Bar+Encinitas',
+    happyHour: {
+      days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      start: '3:00 PM',
+      end: '6:00 PM',
+      details: 'Neighborhood dive — core regular crowd',
+    },
     events: [
       { day: 'Tuesday', type: 'neighborhood night', time: '7-10 PM', broadAppeal: true },
       { day: 'Thursday', type: 'neighborhood night', time: '7-10 PM', broadAppeal: true },
@@ -143,6 +145,12 @@ export const VENUES: Venue[] = [
     conversationFriendly: true,
     energy: 'medium',
     infoUrl: 'https://www.thisiscampfire.com',
+    happyHour: {
+      days: ['Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      start: '4:00 PM',
+      end: '6:00 PM',
+      details: 'Patio with fire pits, conversation-friendly',
+    },
     events: [
       { day: 'Friday', type: 'patio scene', time: '6-9 PM', broadAppeal: true },
       { day: 'Saturday', type: 'patio scene', time: '6-9 PM', broadAppeal: true },

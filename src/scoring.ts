@@ -12,45 +12,80 @@ export function todayName(date: Date = new Date()): DayName {
   return DAY_NAMES[date.getDay()];
 }
 
+function isHappyHourActive(venue: Venue, at: Date = new Date()): boolean {
+  if (!venue.happyHour) return false;
+  const day = DAY_NAMES[at.getDay()];
+  if (!venue.happyHour.days.includes(day)) return false;
+  const startMin = parseTimeToMinutes(venue.happyHour.start);
+  const endMin = parseTimeToMinutes(venue.happyHour.end);
+  if (startMin === null || endMin === null) return false;
+  const nowMin = at.getHours() * 60 + at.getMinutes();
+  return nowMin >= startMin && nowMin <= endMin;
+}
+
+function parseTimeToMinutes(s: string): number | null {
+  const m = s.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const mm = m[2] ? parseInt(m[2], 10) : 0;
+  const ap = m[3]?.toUpperCase();
+  if (ap === 'PM' && h < 12) h += 12;
+  if (ap === 'AM' && h === 12) h = 0;
+  return h * 60 + mm;
+}
+
 function scoreVenueEvent(
   venue: Venue,
   event: VenueEvent,
   goal: Goal,
   vibe: Vibe,
+  happyHourOnThisDay: boolean = false,
 ): { score: number; reason: string } {
   let score = 0;
   const reasons: string[] = [];
 
+  // Core: event exists
   score += 5;
 
-  const wantEnergy = goal === 'social' || goal === 'both';
-  if (venue.energy === 'high' && wantEnergy) {
-    score += 3;
-    reasons.push('High social energy');
-  }
-
-  const wantConversation = goal === 'dating' || goal === 'both';
-  if (venue.conversationFriendly && wantConversation) {
-    score += 3;
-    reasons.push('Strong for conversation');
-  }
-
+  // BIGGEST BOOST: places you can become a regular.
+  // Goal is casual dating via familiarity, not the hot scene.
   if (venue.repeatFriendly) {
-    score += 2;
-    if (reasons.length === 0) reasons.push('Familiar local crowd');
+    score += 4;
+    reasons.push('Become a regular here');
   }
 
-  if (event.broadAppeal) score += 2;
+  if (venue.conversationFriendly) {
+    score += 3;
+    reasons.push('Conversation-friendly');
+  }
+
+  // Happy hour on this day = a time when regulars naturally gather
+  if (happyHourOnThisDay && venue.repeatFriendly) {
+    score += 2;
+    if (reasons.length === 0) reasons.push('Happy hour regulars');
+  }
+
+  // Energy is now a smaller factor — prefer medium (conversational) over high
+  if (venue.energy === 'medium') {
+    score += 1;
+  } else if (venue.energy === 'high') {
+    // high energy venues work for "social" goal but hurt for dating
+    if (goal === 'social') score += 1;
+    if (goal === 'dating') score -= 2;
+  }
+
+  if (event.broadAppeal) score += 1;
   if (venue.lowSocialValue) score -= 3;
 
-  if (vibe === 'quiet' && venue.energy === 'high') score -= 2;
+  // Vibe override
+  if (vibe === 'quiet' && venue.energy === 'high') score -= 3;
   if (vibe === 'high' && venue.energy === 'low') score -= 2;
-  if (vibe === 'balanced' && venue.energy === 'medium') score += 1;
 
-  if (goal === 'dating' && !venue.repeatFriendly) score -= 2;
+  // Dating penalties — missing regulars or conversation is a dealbreaker
+  if (goal === 'dating' && !venue.repeatFriendly) score -= 3;
   if (goal === 'dating' && !venue.conversationFriendly) score -= 2;
 
-  return { score, reason: reasons[0] ?? 'Balanced environment' };
+  return { score, reason: reasons[0] ?? 'Decent local option' };
 }
 
 function scoreLocalEvent(
@@ -252,26 +287,61 @@ export function getDayPicks(
   const categorySet = new Set(prefs.categories);
   const dateStr = targetDate.toISOString().slice(0, 10);
 
-  // Score all venues for this day
+  const now = new Date();
+  const todayStrNow = now.toISOString().slice(0, 10);
+  const isLookingAtToday = dateStr === todayStrNow;
+
+  // Score all venues for this day (including venues with happy hour but no event)
   const all: Recommendation[] = [];
+  const seenVenueNames = new Set<string>();
+
   for (const venue of VENUES) {
     if (!areas.has(venue.area)) continue;
     const ev = venue.events.find((e) => e.day === day);
-    if (!ev) continue;
+    const hasHappyHour = !!venue.happyHour && venue.happyHour.days.includes(day);
 
-    const { score, reason } = scoreVenueEvent(venue, ev, prefs.goal, prefs.vibe);
+    // Include venue if it has an event today OR an active happy hour today
+    if (!ev && !hasHappyHour) continue;
+
+    // Build happy hour note
+    let happyHourNote: string | undefined;
+    let happyHourActive = false;
+    if (hasHappyHour) {
+      const hh = venue.happyHour!;
+      happyHourNote = `Happy hour ${hh.start}-${hh.end}`;
+      if (isLookingAtToday) {
+        happyHourActive = isHappyHourActive(venue, now);
+        if (happyHourActive) happyHourNote = `HH active now (until ${hh.end})`;
+      }
+    }
+
+    // If there's a live event use it, otherwise show the happy hour as the "event"
+    const eventTime = ev?.time ?? (venue.happyHour ? `${venue.happyHour.start}-${venue.happyHour.end}` : '');
+    const eventType = ev?.type ?? (venue.happyHour ? (venue.happyHour.details ?? 'happy hour') : '');
+    const fakeEvent: VenueEvent = ev ?? {
+      day,
+      type: eventType,
+      time: eventTime,
+      broadAppeal: true,
+    };
+
+    const { score, reason } = scoreVenueEvent(venue, fakeEvent, prefs.goal, prefs.vibe, hasHappyHour);
     const grade = gradeFor(score);
+
+    seenVenueNames.add(venue.name);
     all.push({
       kind: 'venue',
       title: venue.name,
       area: venue.area,
-      time: ev.time,
-      subtitle: ev.type,
+      time: eventTime,
+      subtitle: eventType,
       grade,
       decision: decisionFor(grade),
       reason,
       score,
       infoUrl: venue.infoUrl,
+      happyHourNote,
+      happyHourActive,
     });
   }
 

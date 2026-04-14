@@ -19,7 +19,8 @@ export type Category =
   | 'theater_small'
   | 'movies_indie'
   | 'meetups_clubs'
-  | 'wellness';
+  | 'wellness'
+  | 'happy_hour';
 
 export const CATEGORIES: { value: Category; label: string; icon: string }[] = [
   { value: 'hiking_outdoor',    label: 'Hiking & Outdoor',    icon: 'mountain' },
@@ -34,6 +35,7 @@ export const CATEGORIES: { value: Category; label: string; icon: string }[] = [
   { value: 'movies_indie',      label: 'Indie & Outdoor Film', icon: 'movie' },
   { value: 'meetups_clubs',     label: 'Meetups & Clubs',     icon: 'meetup' },
   { value: 'wellness',          label: 'Wellness & Yoga',     icon: 'wellness' },
+  { value: 'happy_hour',        label: 'Happy Hour',          icon: 'drinks' },
 ];
 
 export interface VenueEvent {
@@ -41,6 +43,13 @@ export interface VenueEvent {
   type: string;
   time: string;
   broadAppeal: boolean;
+}
+
+export interface HappyHour {
+  days: DayName[];       // e.g. ['Monday','Tuesday','Wednesday','Thursday','Friday']
+  start: string;         // "3:00 PM" or "15:00"
+  end: string;           // "5:00 PM" or "17:00"
+  details?: string;      // "Half-off apps, $5 drafts, $8 wells"
 }
 
 export interface Venue {
@@ -51,6 +60,7 @@ export interface Venue {
   energy: Energy;
   lowSocialValue?: boolean;
   infoUrl?: string;
+  happyHour?: HappyHour;
   events: VenueEvent[];
 }
 
@@ -93,6 +103,8 @@ export interface Recommendation {
   category?: Category;      // events only
   sourceName?: string;      // events only
   infoUrl?: string;         // tappable link for more info
+  happyHourNote?: string;   // "Happy hour 3-5 PM" or "HH active now"
+  happyHourActive?: boolean; // true if HH is happening right now (when viewing today)
 }
 
 export interface RecommendationResult {

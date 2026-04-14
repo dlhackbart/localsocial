@@ -36,10 +36,20 @@ function PickCard({ rec, rank }: { rec: Recommendation; rank: number }) {
         <Text style={styles.rankText}>{rank}</Text>
       </View>
       <View style={styles.pickContent}>
-        <Text style={styles.pickTitle}>{rec.title}</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.pickTitle}>{rec.title}</Text>
+          {rec.happyHourActive && (
+            <View style={styles.hhBadgeActive}>
+              <Text style={styles.hhBadgeActiveText}>HH NOW</Text>
+            </View>
+          )}
+        </View>
         <Text style={styles.pickSub}>
           {rec.area} · {rec.time} · {tag}
         </Text>
+        {rec.happyHourNote && !rec.happyHourActive && (
+          <Text style={styles.hhNote}>{rec.happyHourNote}</Text>
+        )}
         <View style={styles.pickBadges}>
           <View style={[styles.miniBadge, { backgroundColor: decisionColor[rec.decision] }]}>
             <Text style={styles.miniBadgeText}>{rec.decision}</Text>
@@ -105,6 +115,16 @@ export default function HomeScreen() {
       <Text style={styles.dim}>
         {prefs.homeArea} + {prefs.enabledZones.join(', ')}
       </Text>
+
+      {/* Happy Hour Now banner */}
+      {weeklyPlan[0]?.picks.some((p) => p.happyHourActive) && (
+        <View style={styles.hhBanner}>
+          <Text style={styles.hhBannerTitle}>Happy Hour active right now</Text>
+          <Text style={styles.hhBannerSub}>
+            Regulars are showing up. Good chance to start being one.
+          </Text>
+        </View>
+      )}
 
       {weeklyPlan.map((plan) => (
         <DaySection key={plan.date} plan={plan} />
@@ -238,6 +258,46 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
+  hhBanner: {
+    backgroundColor: colors.go,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    marginTop: spacing.sm,
+  },
+  hhBannerTitle: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 16,
+  },
+  hhBannerSub: {
+    color: '#fff',
+    fontSize: 13,
+    opacity: 0.9,
+    marginTop: 4,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  hhBadgeActive: {
+    backgroundColor: colors.go,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  hhBadgeActiveText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  hhNote: {
+    color: colors.maybe,
+    fontSize: 12,
+    fontWeight: '600',
+    fontStyle: 'italic',
+  },
   infoLink: {
     color: colors.accent,
     fontSize: 13,
