@@ -42,6 +42,15 @@ DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "
 
 VENUES = [
     {
+        "name": "Torrey Pines Gliderport", "area": "Del Mar",
+        "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
+        "happyHour": {"days": ["Monday","Tuesday","Wednesday","Thursday"], "start": "4:00 PM", "end": "5:00 PM"},
+        "events": [
+            {"day": "Friday", "type": "Cliffhanger sunset", "time": "5-8 PM", "broadAppeal": True},
+            {"day": "Saturday", "type": "Cliffhanger sunset", "time": "5-8 PM", "broadAppeal": True},
+        ],
+    },
+    {
         "name": "Monarch Ocean Pub", "area": "Del Mar",
         "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
         "happyHour": {"days": ["Tuesday","Wednesday","Thursday","Friday"], "start": "4:00 PM", "end": "6:00 PM"},

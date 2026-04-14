@@ -4,7 +4,27 @@ import { Venue } from '../types';
 // Times are approximate — always verify with the venue. Defaults noted.
 
 export const VENUES: Venue[] = [
-  // ---------- Del Mar ----------
+  // ---------- Del Mar / La Jolla ----------
+  {
+    name: 'Torrey Pines Gliderport',
+    area: 'Del Mar',
+    repeatFriendly: true,
+    conversationFriendly: true,
+    energy: 'medium',
+    infoUrl: 'https://flytorrey.com/event-calendar',
+    happyHour: {
+      days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday'],
+      start: '4:00 PM',
+      end: '5:00 PM',
+      details: 'Cliffhanger Bar — $6 wine/beer specials, ocean cliff views',
+    },
+    events: [
+      // Summer months (May-Sep) have weekly live music at Cliffhanger
+      // The venue doesn't publish a schedule — mark summer Fri/Sat evenings
+      { day: 'Friday', type: 'Cliffhanger sunset', time: '5-8 PM', broadAppeal: true },
+      { day: 'Saturday', type: 'Cliffhanger sunset', time: '5-8 PM', broadAppeal: true },
+    ],
+  },
   {
     name: 'Del Mar Fairgrounds',
     area: 'Del Mar',
