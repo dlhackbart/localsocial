@@ -7,8 +7,14 @@ Sources:
   3. Encinitas 101 (encinitas101.com/events) — street fairs, cruise nights, tastings
   4. North Coast Rep (northcoastrep.org) — theater shows
   5. Del Mar city calendar (delmar.ca.us) — community events (via iCal, already wired)
+  6. Weekly venue schedules (per-venue homepages) — pulls recurring day/time
+     patterns ("Trivia Tuesday 7 PM", "Live music every Friday") from the 8
+     static venues with real websites. Falls back to hardcoded venue data in
+     daily_social_plan.py when the scrape yields nothing.
 
-Output: data/scraped_events.json — consumed by daily_social_plan.py
+Output:
+  - data/scraped_events.json   — dated events (consumed by daily_social_plan.py)
+  - data/venue_schedules.json  — scraped weekly patterns per venue (overlay)
 
 Usage:
     python scrape_events.py              # Scrape all sources, save to JSON
@@ -25,6 +31,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 DATA_DIR.mkdir(exist_ok=True)
 OUTPUT_FILE = DATA_DIR / "scraped_events.json"
+VENUE_SCHEDULES_FILE = DATA_DIR / "venue_schedules.json"
 
 # How far ahead to look
 LOOKAHEAD_DAYS = 30
@@ -615,6 +622,520 @@ def scrape_fairgrounds() -> list[dict]:
     return events
 
 
+# ─── Weekly venue schedule scraper ───────────────────────────────────────────
+#
+# For venues that don't have structured event feeds, fetch the site and pull
+# recurring day-of-week patterns ("Trivia Tuesday 7 PM", "Happy Hour M-F 3-6").
+# Writes to data/venue_schedules.json — daily_social_plan.py overlays these
+# onto the hardcoded VENUES data when available.
+#
+# URLs come from data/venue_urls.json (managed by scripts/venue_registry.py).
+# Each run also discovers new event-relevant subpages on known domains and
+# adds them to the registry. Dead URLs get marked dormant after repeat fails.
+
+import venue_registry
+
+_DAY_ALIASES = {
+    "mon": "Monday", "monday": "Monday",
+    "tue": "Tuesday", "tues": "Tuesday", "tuesday": "Tuesday",
+    "wed": "Wednesday", "weds": "Wednesday", "wednesday": "Wednesday",
+    "thu": "Thursday", "thur": "Thursday", "thurs": "Thursday", "thursday": "Thursday",
+    "fri": "Friday", "friday": "Friday",
+    "sat": "Saturday", "saturday": "Saturday",
+    "sun": "Sunday", "sunday": "Sunday",
+}
+_DAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+_DAY_PATTERN = r"(?:mon|tues?|wed(?:s|nes)?|thur?s?|fri|sat|sun)(?:day)?"
+_TIME_PATTERN = r"\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)"
+_TIME_RANGE = rf"{_TIME_PATTERN}\s*[-–—to ]+\s*{_TIME_PATTERN}"
+
+# Keywords that signal this sentence describes a recurring event worth capturing
+_EVENT_KEYWORDS = [
+    "happy hour", "live music", "live band", "trivia", "karaoke",
+    "brunch", "dj", "open mic", "bingo", "taco tuesday", "sunset",
+    "acoustic", "happy-hour", "game night", "oyster", "burger night",
+    "ladies night", "industry night", "patio", "social hour",
+]
+
+
+def _normalize_day(raw: str) -> str | None:
+    return _DAY_ALIASES.get(raw.lower().strip().rstrip("."))
+
+
+def _expand_day_range(start: str, end: str) -> list[str]:
+    s = _normalize_day(start)
+    e = _normalize_day(end)
+    if not s or not e:
+        return []
+    si, ei = _DAY_ORDER.index(s), _DAY_ORDER.index(e)
+    if si <= ei:
+        return _DAY_ORDER[si:ei + 1]
+    return _DAY_ORDER[si:] + _DAY_ORDER[:ei + 1]
+
+
+def _clean_time(t: str) -> str:
+    return re.sub(r"\s+", "", t.strip()).upper().replace("AM", " AM").replace("PM", " PM").strip()
+
+
+def _clean_time_range(tr: str) -> str:
+    parts = re.split(r"\s*[-–—]\s*|\s+to\s+", tr.strip(), maxsplit=1)
+    if len(parts) == 2:
+        return f"{_clean_time(parts[0])}-{_clean_time(parts[1])}"
+    return _clean_time(tr)
+
+
+def _guess_event_type(snippet: str) -> str:
+    lower = snippet.lower()
+    for kw in _EVENT_KEYWORDS:
+        if kw in lower:
+            return kw.replace("-", " ").title() if kw in {"happy-hour"} else kw
+    # Fallback: collapse whitespace, trim to ~40 chars of the snippet
+    cleaned = re.sub(r"\s+", " ", snippet).strip()
+    return cleaned[:50].rstrip(",. ") if cleaned else "recurring event"
+
+
+def _extract_schedule_from_text(text: str) -> list[dict]:
+    """Pull (day, time, type) tuples from free-form text.
+
+    Captures three shapes:
+      1. DAY RANGE + TIME RANGE:  "Mon-Fri 3-6 PM"  (often happy hour)
+      2. single DAY + TIME:        "Trivia Tuesday 7 PM"
+      3. "every DAY" + optional TIME
+    """
+    events: list[dict] = []
+    seen: set[tuple[str, str, str]] = set()
+    text_lower = text.lower()
+
+    # Pattern 1: day range + time range (happy-hour style)
+    pat1 = re.compile(
+        rf"({_DAY_PATTERN})\s*[-–—]\s*({_DAY_PATTERN})\s*(?:from\s+)?({_TIME_RANGE}|{_TIME_PATTERN})",
+        re.IGNORECASE,
+    )
+    for m in pat1.finditer(text):
+        days = _expand_day_range(m.group(1), m.group(2))
+        if not days:
+            continue
+        time_str = _clean_time_range(m.group(3))
+        snippet = text[max(0, m.start() - 40):m.end() + 10]
+        ev_type = _guess_event_type(snippet)
+        for d in days:
+            key = (d, ev_type, time_str)
+            if key in seen:
+                continue
+            seen.add(key)
+            events.append({"day": d, "type": ev_type, "time": time_str, "broadAppeal": True})
+
+    # Pattern 2: single day + time (e.g., "Trivia Tuesday 7 PM", "Live music Friday 9pm")
+    pat2 = re.compile(
+        rf"(?:(?P<pre>[A-Za-z][A-Za-z &'-]{{2,30}}?)\s+)?(?P<day>{_DAY_PATTERN})s?\s+(?:at\s+|from\s+)?(?P<time>{_TIME_RANGE}|{_TIME_PATTERN})",
+        re.IGNORECASE,
+    )
+    for m in pat2.finditer(text):
+        day = _normalize_day(m.group("day"))
+        if not day:
+            continue
+        time_str = _clean_time_range(m.group("time"))
+        pre = (m.group("pre") or "").strip()
+        snippet_start = max(0, m.start() - 20)
+        snippet = text[snippet_start:m.end() + 20]
+        # Only keep if the surrounding text mentions an event keyword
+        if not any(kw in snippet.lower() for kw in _EVENT_KEYWORDS):
+            continue
+        ev_type = _guess_event_type((pre + " " + snippet).strip())
+        key = (day, ev_type, time_str)
+        if key in seen:
+            continue
+        seen.add(key)
+        events.append({"day": day, "type": ev_type, "time": time_str, "broadAppeal": True})
+
+    # Pattern 3: "every DAY" (without a time — just confirms the day is active)
+    pat3 = re.compile(rf"every\s+({_DAY_PATTERN})", re.IGNORECASE)
+    for m in pat3.finditer(text):
+        day = _normalize_day(m.group(1))
+        if not day:
+            continue
+        snippet = text[max(0, m.start() - 40):m.end() + 60]
+        if not any(kw in snippet.lower() for kw in _EVENT_KEYWORDS):
+            continue
+        time_match = re.search(_TIME_RANGE + "|" + _TIME_PATTERN, snippet)
+        time_str = _clean_time_range(time_match.group(0)) if time_match else ""
+        ev_type = _guess_event_type(snippet)
+        key = (day, ev_type, time_str)
+        if key in seen or not time_str:
+            continue
+        seen.add(key)
+        events.append({"day": day, "type": ev_type, "time": time_str, "broadAppeal": True})
+
+    return events
+
+
+# ─── LLM-based schedule extraction ───────────────────────────────────────────
+#
+# Regex catches clean day-token patterns ("Monday 7 PM") but misses marketing
+# prose ("every Friday night," "weeknights 3-6"). Claude Haiku handles the
+# prose cases. If the API call fails (no key, network, parse error), we fall
+# back to the regex extractor so the scraper never breaks.
+
+_ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages"
+_LLM_MODEL = "claude-haiku-4-5-20251001"
+_LLM_TEXT_CAP = 8000  # chars of page text per call (keeps cost < $0.001/venue)
+
+
+def _load_anthropic_key() -> str | None:
+    """ANTHROPIC_API_KEY from env first, then spy_timing/config.py."""
+    import os
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if key:
+        return key
+    config_path = PROJECT_ROOT.parent / "spy_timing" / "config.py"
+    if config_path.exists():
+        try:
+            text = config_path.read_text()
+            m = re.search(r"ANTHROPIC_API_KEY\s*=\s*['\"]([^'\"]+)['\"]", text)
+            if m:
+                return m.group(1)
+        except Exception:
+            pass
+    return None
+
+
+# Cache the key check so we don't re-read spy_timing/config.py on every URL
+_anthropic_key_cache: str | None = None
+_anthropic_key_loaded = False
+
+
+def _anthropic_key() -> str | None:
+    global _anthropic_key_cache, _anthropic_key_loaded
+    if not _anthropic_key_loaded:
+        _anthropic_key_cache = _load_anthropic_key()
+        _anthropic_key_loaded = True
+    return _anthropic_key_cache
+
+
+_VALID_DAYS = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+
+# A time range wider than this is almost certainly operating hours, not an event
+_MAX_EVENT_DURATION_HOURS = 6
+
+
+def _norm_time_token(t: str) -> str:
+    """'4PM' / '4pm' / '4:00pm' / '4:00 PM' → '4:00 PM'. Unparseable → original trimmed."""
+    s = t.strip().upper().replace(".", "")
+    s = re.sub(r"\s+", "", s)
+    m = re.match(r"^(\d{1,2})(?::(\d{2}))?(AM|PM)?$", s)
+    if not m:
+        return t.strip()
+    hour = int(m.group(1))
+    mins = m.group(2) or "00"
+    mer = m.group(3) or ""
+    return f"{hour}:{mins} {mer}".strip()
+
+
+def _normalize_time_str(t: str) -> str:
+    """Canonical form: '4:00 PM - 5:00 PM' or '9:00 PM' for single times.
+
+    Handles:
+      - em/en dashes → hyphen
+      - missing meridiem on range start ("3-5 PM" → "3:00 PM - 5:00 PM")
+      - missing minutes ("4PM" → "4:00 PM")
+    """
+    if not t:
+        return ""
+    s = re.sub(r"[–—−]", "-", t.strip())
+    s = re.sub(r"\s+to\s+", "-", s, flags=re.IGNORECASE)
+    parts = [p.strip() for p in re.split(r"\s*-\s*", s) if p.strip()]
+    if len(parts) == 2:
+        start, end = parts
+        end_mer_match = re.search(r"(AM|PM)", end, re.IGNORECASE)
+        if end_mer_match and not re.search(r"(AM|PM)", start, re.IGNORECASE):
+            start = f"{start} {end_mer_match.group(1).upper()}"
+        return f"{_norm_time_token(start)} - {_norm_time_token(end)}"
+    if len(parts) == 1:
+        return _norm_time_token(parts[0])
+    return t.strip()
+
+
+def _parse_hour(token: str) -> float | None:
+    """Return hour as float (e.g. '4:30 PM' → 16.5). None if unparseable."""
+    s = token.strip().upper().replace(".", "")
+    s = re.sub(r"\s+", "", s)
+    m = re.match(r"^(\d{1,2})(?::(\d{2}))?(AM|PM)?$", s)
+    if not m:
+        return None
+    hour = int(m.group(1))
+    mins = int(m.group(2) or "0")
+    mer = m.group(3)
+    if mer == "PM" and hour != 12:
+        hour += 12
+    elif mer == "AM" and hour == 12:
+        hour = 0
+    return hour + mins / 60.0
+
+
+def _event_duration_hours(time_str: str) -> float | None:
+    """Return duration of a time range in hours, or None if not a range/unparseable."""
+    s = re.sub(r"[–—−]", "-", time_str)
+    s = re.sub(r"\s+to\s+", "-", s, flags=re.IGNORECASE)
+    parts = [p.strip() for p in re.split(r"\s*-\s*", s) if p.strip()]
+    if len(parts) != 2:
+        return None
+    start_token, end_token = parts
+    # If start lacks meridiem but end has one, inherit it — "4-5 PM" means
+    # "4 PM to 5 PM", not "4 AM to 5 PM". Without this the duration filter
+    # mis-reads short happy hours as 13-hour spans.
+    if not re.search(r"(AM|PM)", start_token, re.IGNORECASE):
+        end_mer = re.search(r"(AM|PM)", end_token, re.IGNORECASE)
+        if end_mer:
+            start_token = f"{start_token} {end_mer.group(1).upper()}"
+    start_h = _parse_hour(start_token)
+    end_h = _parse_hour(end_token)
+    if start_h is None or end_h is None:
+        return None
+    # Handle wraparound past midnight (e.g. "9 PM - 1 AM")
+    if end_h < start_h:
+        end_h += 24
+    return end_h - start_h
+
+
+_MENU_ITEM_SIGNALS = [
+    "mac and cheese", "mac & cheese", "burger special", "special menu",
+    "menu special", "appetizer", "side dish", "sandwich", "taco special",
+]
+
+
+def _is_menu_item(type_str: str) -> bool:
+    lower = type_str.lower()
+    return any(sig in lower for sig in _MENU_ITEM_SIGNALS)
+
+
+def _normalize_type_for_dedup(t: str) -> str:
+    """Lowercase, collapse whitespace, strip parens — dedup key only."""
+    s = re.sub(r"\s*\([^)]*\)", "", t.strip().lower())
+    return re.sub(r"\s+", " ", s)
+
+
+def _llm_extract_schedule(text: str, venue_name: str) -> list[dict] | None:
+    """Ask Claude Haiku to extract recurring weekly events from page text.
+
+    Returns a list of {day, type, time, broadAppeal} dicts, or None if the LLM
+    call failed (network, bad JSON, missing key). Caller should fall back to
+    regex extraction on None.
+    """
+    api_key = _anthropic_key()
+    if not api_key or not text.strip():
+        return None
+
+    trimmed = text[:_LLM_TEXT_CAP]
+    prompt = f"""You are extracting recurring weekly SOCIAL EVENTS from a venue website. The venue is "{venue_name}".
+
+Below is the text content of a page from their site. Extract ONLY events people gather for at a specific day and time: happy hour, trivia, live music, karaoke, brunch, DJ sets, themed nights, tastings, open mic, bingo, etc.
+
+For each event, return:
+  - "days": a list of day names from Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday. Expand ranges ("Mon-Fri" -> all 5). Interpret "weeknights" as Mon-Thu, "weekends" as Sat-Sun, "daily" as all 7.
+  - "time": the time range as written (e.g. "3-6 PM", "9:00 PM", "8 AM-12 PM")
+  - "type": a short label like "happy hour", "live music", "trivia", "brunch", "DJ", "karaoke"
+
+Rules — READ CAREFULLY:
+  1. Only extract events LITERALLY mentioned in the text. Do not infer or invent.
+  2. DO NOT extract menu items, food specials, or dishes that are always available (e.g. "Mac and Cheese Special", "our famous burger"). Those are menu items, not events. Only extract a food special if it's a named recurring EVENT where people show up at a specific time (e.g. "Taco Tuesday 5-8 PM" is OK; "$5 burgers all day" is NOT).
+  3. DO NOT extract time ranges that equal the venue's operating hours (e.g. "11 AM - 12 AM", "4 PM - close"). Those are business hours, not events. Event time ranges are typically 1-4 hours long.
+  4. Skip one-off dated events (e.g. "April 22 show" — handled elsewhere).
+  5. Skip items without both a specific day AND a specific time.
+  6. Return a raw JSON array. No markdown, no prose. Return [] if nothing matches.
+
+--- PAGE TEXT ---
+{trimmed}
+--- END ---"""
+
+    try:
+        body = json.dumps({
+            "model": _LLM_MODEL,
+            "max_tokens": 1024,
+            "messages": [{"role": "user", "content": prompt}],
+        }).encode()
+        req = urllib.request.Request(
+            _ANTHROPIC_ENDPOINT,
+            data=body,
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read().decode())
+        text_out = result.get("content", [{}])[0].get("text", "")
+        match = re.search(r"\[[\s\S]*\]", text_out)
+        if not match:
+            return []
+        raw = json.loads(match.group(0))
+    except Exception as e:
+        print(f"    [LLM] call failed: {e}")
+        return None
+
+    # Flatten day lists, validate, normalize time, drop menu items / all-day specials
+    events: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        days = item.get("days") or []
+        if isinstance(days, str):
+            days = [days]
+        time_str = (item.get("time") or "").strip()
+        type_str = (item.get("type") or "").strip()
+        if not time_str or not type_str:
+            continue
+        if _is_menu_item(type_str):
+            continue
+        dur = _event_duration_hours(time_str)
+        if dur is not None and dur > _MAX_EVENT_DURATION_HOURS:
+            continue
+        normalized_time = _normalize_time_str(time_str)
+        for d in days:
+            if not isinstance(d, str):
+                continue
+            d_norm = d.strip().title()
+            if d_norm not in _VALID_DAYS:
+                continue
+            events.append({
+                "day": d_norm,
+                "type": type_str,
+                "time": normalized_time,
+                "broadAppeal": True,
+            })
+    return events
+
+
+# Needed for the Anthropic HTTP call above (urllib imported lazily inside fetch_url)
+import urllib.request
+
+
+def _html_to_text(html: str) -> str:
+    """Strip HTML to plain text, preserving token spacing."""
+    text = re.sub(r"<script[^>]*>.*?</script>", " ", html, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<style[^>]*>.*?</style>", " ", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"&[a-z]+;", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
+def scrape_venue_schedule(reg: dict, name: str) -> dict:
+    """Scrape every known URL for one venue, discovering new subpages as we go.
+
+    Mutates the registry (success/failure counts, newly discovered URLs). Returns
+    a dict with merged events across all URLs that yielded at least one pattern.
+    """
+    urls_to_try = venue_registry.live_urls_for(reg, name)
+    if not urls_to_try:
+        return {"venue": name, "urls": [], "events": [], "error": "no_live_urls"}
+
+    merged_events: list[dict] = []
+    seen_keys: set[tuple[str, str, str]] = set()
+    urls_fetched: list[str] = []
+    newly_discovered: list[str] = []
+
+    # Fetch queue: known URLs first. Subpage discovery only runs on URLs that
+    # actually returned HTML — we don't want to fan out from dead pages.
+    queue = list(urls_to_try)
+    processed: set[str] = set()
+
+    while queue:
+        url = queue.pop(0)
+        if url in processed:
+            continue
+        processed.add(url)
+
+        html = fetch_url(url)
+        if not html:
+            venue_registry.mark_failure(reg, name, url)
+            continue
+
+        venue_registry.mark_success(reg, name, url)
+        urls_fetched.append(url)
+
+        # Extract weekly patterns from this page — LLM first, regex fallback
+        text = _html_to_text(html)
+        extracted = _llm_extract_schedule(text, name)
+        source_tag = "llm"
+        if extracted is None:
+            extracted = _extract_schedule_from_text(text)
+            source_tag = "regex"
+        for ev in extracted:
+            # Dedup on normalized values so "4-5PM" and "4:00 PM - 5:00 PM"
+            # collapse. Display value keeps whichever variant arrived first.
+            key = (
+                ev["day"],
+                _normalize_type_for_dedup(ev["type"]),
+                _normalize_time_str(ev["time"]),
+            )
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            ev["_extracted_by"] = source_tag
+            merged_events.append(ev)
+
+        # Discover new event-relevant subpages (only from pages we haven't
+        # already crawled — avoid infinite loops)
+        for sub in venue_registry.discover_subpage_urls(html, url):
+            if sub in processed:
+                continue
+            if venue_registry.add_url(reg, name, sub, source="discovered"):
+                newly_discovered.append(sub)
+                queue.append(sub)
+
+    return {
+        "venue": name,
+        "urls": urls_fetched,
+        "newly_discovered": newly_discovered,
+        "scraped_at": datetime.now().isoformat(),
+        "events": merged_events,
+    }
+
+
+def scrape_all_venue_schedules(persist_registry: bool = True) -> dict:
+    """Scrape weekly patterns for every venue in the registry.
+
+    Also discovers new event-relevant subpages on known domains and updates the
+    registry so future runs hit them directly. Pass persist_registry=False to
+    skip writing the updated registry to disk (used by --dry-run).
+    """
+    reg = venue_registry.load()
+    result: dict[str, dict] = {}
+
+    for name in venue_registry.venues(reg):
+        print(f"[VENUE SCHEDULE] {name}...")
+        sched = scrape_venue_schedule(reg, name)
+        evs = sched.get("events", [])
+        new_urls = sched.get("newly_discovered", [])
+        if sched.get("error") == "no_live_urls":
+            print(f"  [WARN] all known URLs dormant — hardcoded schedule will be used")
+        else:
+            print(f"  fetched {len(sched['urls'])} URL(s), found {len(evs)} pattern(s)", end="")
+            if new_urls:
+                print(f", discovered {len(new_urls)} new subpage(s)")
+                for u in new_urls:
+                    print(f"    + {u}")
+            else:
+                print()
+        result[name] = sched
+
+    if persist_registry:
+        venue_registry.save(reg)
+    return result
+
+
+def save_venue_schedules(schedules: dict):
+    payload = {
+        "scraped_at": datetime.now().isoformat(),
+        "venue_count": len(schedules),
+        "schedules": schedules,
+    }
+    VENUE_SCHEDULES_FILE.write_text(json.dumps(payload, indent=2))
+    total_events = sum(len(s.get("events", [])) for s in schedules.values())
+    print(f"[SAVED] {VENUE_SCHEDULES_FILE} ({len(schedules)} venues, {total_events} weekly patterns)")
+
+
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def scrape_all() -> list[dict]:
@@ -674,6 +1195,9 @@ if __name__ == "__main__":
     dry_run = "--dry-run" in sys.argv
     events = scrape_all()
 
+    print("\n[SCRAPE] Weekly venue schedules...")
+    schedules = scrape_all_venue_schedules(persist_registry=not dry_run)
+
     if dry_run:
         print(f"\n{'='*60}")
         print(f"SCRAPED EVENTS ({len(events)})")
@@ -682,5 +1206,23 @@ if __name__ == "__main__":
             big = " ***BIG***" if ev.get("big_event") else ""
             print(f"  {ev['date']}  {ev['venue']:<30}  {ev['title']}{big}")
             print(f"           {ev['time']}  [{ev['category']}]  src: {ev['source']}")
+
+        print(f"\n{'='*60}")
+        print(f"VENUE WEEKLY SCHEDULES ({len(schedules)} venues)")
+        print(f"{'='*60}")
+        for name, sched in schedules.items():
+            err = sched.get("error")
+            evs = sched.get("events", [])
+            urls = sched.get("urls", [])
+            if err == "no_live_urls":
+                print(f"  {name}: [all URLs dormant] — hardcoded fallback")
+                continue
+            if not evs:
+                print(f"  {name}: no weekly patterns matched ({len(urls)} URL(s) scanned) — hardcoded fallback")
+                continue
+            print(f"  {name}: {len(evs)} patterns from {len(urls)} URL(s)")
+            for e in evs:
+                print(f"    {e['day']:<10} {e['time']:<18} {e['type']}")
     else:
         save_events(events)
+        save_venue_schedules(schedules)

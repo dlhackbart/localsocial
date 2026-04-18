@@ -133,6 +133,26 @@ VENUES = [
         ],
     },
     {
+        "name": "Pacifica Del Mar", "area": "Del Mar",
+        "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
+        "happyHour": {"days": ["Tuesday","Wednesday","Thursday","Friday","Saturday"], "start": "4:00 PM", "end": "6:30 PM"},
+        "events": [
+            {"day": "Sunday", "type": "HH all night", "time": "4 PM-close", "broadAppeal": True},
+            {"day": "Monday", "type": "HH all night", "time": "4 PM-close", "broadAppeal": True},
+            {"day": "Tuesday", "type": "Taco Tuesday ($5 tacos all night)", "time": "4-9 PM", "broadAppeal": True},
+            {"day": "Wednesday", "type": "$9 gin/vodka night", "time": "4-9 PM", "broadAppeal": True},
+            {"day": "Thursday", "type": "half-off bottles", "time": "4-9 PM", "broadAppeal": True},
+        ],
+    },
+    {
+        "name": "Ki's Restaurant", "area": "Encinitas",
+        "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
+        "happyHour": {"days": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"], "start": "3:30 PM", "end": "6:00 PM"},
+        "events": [
+            {"day": "Friday", "type": "live music — The Spell (70s/80s/90s classics)", "time": "7-9 PM", "broadAppeal": True},
+        ],
+    },
+    {
         "name": "Belly Up Tavern", "area": "Solana Beach",
         "repeatFriendly": False, "conversationFriendly": False, "energy": "high",
         "events": [
@@ -311,6 +331,7 @@ def decision_for(grade):
 # ─── Scraped events ──────────────────────────────────────────────────────────
 
 SCRAPED_FILE = PROJECT_ROOT / "data" / "scraped_events.json"
+VENUE_SCHEDULES_FILE = PROJECT_ROOT / "data" / "venue_schedules.json"
 
 
 def load_scraped_events(for_date: date) -> list[dict]:
@@ -324,6 +345,54 @@ def load_scraped_events(for_date: date) -> list[dict]:
         return [e for e in events if e.get("date") == date_str]
     except (json.JSONDecodeError, KeyError):
         return []
+
+
+def load_venue_schedules() -> dict:
+    """Load scraped weekly venue schedules. Returns {} if unavailable."""
+    if not VENUE_SCHEDULES_FILE.exists():
+        return {}
+    try:
+        data = json.loads(VENUE_SCHEDULES_FILE.read_text())
+        return data.get("schedules", {})
+    except (json.JSONDecodeError, KeyError):
+        return {}
+
+
+_REGISTRY_FILE = PROJECT_ROOT / "data" / "venue_urls.json"
+
+
+def load_venue_descriptions() -> dict:
+    """Return {venue_name: description} from the registry. Empty dict if missing."""
+    if not _REGISTRY_FILE.exists():
+        return {}
+    try:
+        data = json.loads(_REGISTRY_FILE.read_text())
+        return {
+            name: v.get("description", "")
+            for name, v in data.get("venues", {}).items()
+            if v.get("description")
+        }
+    except (json.JSONDecodeError, KeyError):
+        return {}
+
+
+def _apply_venue_schedules(venues: list[dict], schedules: dict) -> list[dict]:
+    """Overlay scraped weekly patterns onto the hardcoded VENUES list.
+
+    If the scraper produced at least one event for a venue, its events replace
+    the hardcoded ones. If the scrape failed or found nothing, the hardcoded
+    schedule is kept (fallback). Venue attributes (energy, conversationFriendly,
+    repeatFriendly, happyHour) are never overwritten — only the events list.
+    """
+    merged = []
+    for venue in venues:
+        scraped = schedules.get(venue["name"])
+        scraped_events = (scraped or {}).get("events") or []
+        if scraped_events:
+            merged.append({**venue, "events": scraped_events, "_source": "scraped"})
+        else:
+            merged.append({**venue, "_source": "hardcoded"})
+    return merged
 
 
 # ─── Plan generation ─────────────────────────────────────────────────────────
@@ -351,6 +420,12 @@ def generate_plan(today=None, home_area=None, zones=None):
     # Load scraped events for today FIRST — we use them to enrich static venues
     scraped = load_scraped_events(today)
     scraped_for_area = [e for e in scraped if e.get("area") in allowed_areas]
+
+    # Overlay scraped weekly schedules on top of hardcoded VENUES. If the
+    # daily scraper found patterns for a venue, they replace that venue's
+    # hardcoded events. Missing/failed scrapes fall back to hardcoded data.
+    venues_effective = _apply_venue_schedules(VENUES, load_venue_schedules())
+    descriptions = load_venue_descriptions()
 
     # Extract Monarch performer from scraped data (Del Mar Plaza lists them as
     # "Live Music – Monarch Ocean Pub – Lee Melton"). These replace the generic
@@ -395,7 +470,7 @@ def generate_plan(today=None, home_area=None, zones=None):
 
     # Score all venues with today's events OR happy hour on this day
     candidates = []
-    for venue in VENUES:
+    for venue in venues_effective:
         if venue["area"] not in allowed_areas:
             continue
         day_events = [e for e in venue["events"] if e["day"] == day_name]
@@ -435,6 +510,7 @@ def generate_plan(today=None, home_area=None, zones=None):
             "grade": grade,
             "decision": decision_for(grade),
             "reason": reason,
+            "description": descriptions.get(venue["name"], ""),
             "energy": venue["energy"],
             "conversationFriendly": venue["conversationFriendly"],
             "repeatFriendly": venue["repeatFriendly"],
@@ -449,7 +525,7 @@ def generate_plan(today=None, home_area=None, zones=None):
         lookup_names = FEATURED_VENUE_LOOKUPS.get(fname, [fname])
         notes = []
         for lname in lookup_names:
-            venue_data = next((v for v in VENUES if v["name"] == lname), None)
+            venue_data = next((v for v in venues_effective if v["name"] == lname), None)
             if not venue_data:
                 continue
             day_events = [e for e in venue_data["events"] if e["day"] == day_name]
@@ -497,8 +573,9 @@ def generate_plan(today=None, home_area=None, zones=None):
                 reasons[0] = f"{reasons[0]} — local to you"
 
         grade = grade_for(score)
+        venue_name = ev.get("venue", "Unknown")
         scraped_candidates.append({
-            "venue": ev.get("venue", "Unknown"),
+            "venue": venue_name,
             "area": ev.get("area", ""),
             "time": ev.get("time", ""),
             "event_type": ev.get("title", ""),
@@ -506,6 +583,7 @@ def generate_plan(today=None, home_area=None, zones=None):
             "grade": grade,
             "decision": decision_for(grade),
             "reason": reasons[0] if reasons else "Confirmed local event",
+            "description": descriptions.get(venue_name, ""),
             "energy": "high" if ev.get("big_event") else "medium",
             "conversationFriendly": ev.get("category") not in ("live_music_small",),
             "repeatFriendly": False,
@@ -616,6 +694,8 @@ def format_full_plan(plan):
         big = "  *** BIG EVENT ***" if pick.get("big_event") else ""
         lines.append(f"{label}: {pick['venue']} — {pick['time']}{big}")
         lines.append(f"  {pick['event_type']}")
+        if pick.get("description"):
+            lines.append(f"  {pick['description']}")
         if pick.get("happy_hour_note"):
             lines.append(f"  {pick['happy_hour_note']}")
         lines.append(f"  Crowd: {_crowd_desc(pick)}  |  Grade {pick['grade']}  |  {pick['decision']}")
@@ -720,6 +800,8 @@ def _format_day_picks(plan, is_today=False):
         hh = f"  [HH {pick['happy_hour_note'].replace('Happy hour ', '')}]" if pick.get("happy_hour_note") else ""
         lines.append(f"  {num}. {pick['venue']} — {pick['time']}{big}{hh}")
         lines.append(f"     {pick['event_type']}")
+        if pick.get("description"):
+            lines.append(f"     {pick['description']}")
         lines.append(f"     {_crowd_desc(pick)}  |  Grade {pick['grade']}  |  {pick['decision']}")
 
     # Featured venue notes (only if not in picks)
@@ -757,6 +839,8 @@ def format_weekly_plan(plans):
             big = "  *** BIG EVENT ***" if pick.get("big_event") else ""
             lines.append(f"{label}: {pick['venue']} — {pick['time']}{big}")
             lines.append(f"  {pick['event_type']}")
+            if pick.get("description"):
+                lines.append(f"  {pick['description']}")
             lines.append(f"  Crowd: {_crowd_desc(pick)}  |  Grade {pick['grade']}  |  {pick['decision']}")
             lines.append(f"  {pick['reason']}")
             lines.append("")

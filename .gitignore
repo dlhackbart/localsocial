@@ -21,6 +21,18 @@ scripts/scrape.log
 
 # Scraped event data (regenerated daily)
 data/scraped_events.json
+data/venue_schedules.json
+
+# Venue registry — seeded from scripts/seed_venue_descriptions.py,
+# accumulates discovered subpages + per-URL success stats at runtime
+data/venue_urls.json
+data/venue_urls.json.bak
+
+# LLM-suggested new-venue candidates pending manual review
+data/venue_candidates.json
+
+# City-discovery output (per-city validated source lists)
+data/city_sources/
 
 # Claude Code local settings
 .claude/
