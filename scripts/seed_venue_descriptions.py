@@ -56,6 +56,15 @@ VENUE_DESCRIPTIONS: list[tuple[str, str, str, str]] = [
     ("North Coast Repertory Theatre", "Solana Beach", "",
      "Solana Beach's resident theater company. Seasonal productions — currently Beau Jest, upcoming The Most Happy Fella."),
 
+    ("Carruth Cellars", "Solana Beach", "https://carruthcellars.com",
+     "Urban winery on Cedros Design District (118 S Cedros). Trivia Tue 6-8 PM, Acoustic Wed 5-8 PM, Foodie Fri 5-8 PM. Conversational wine-bar vibe."),
+
+    ("Rustic Root", "Solana Beach", "https://www.rusticrootsd.com",
+     "Rustic American + cocktail lounge on Solana Beach Hwy 101 (343 S Hwy 101). Live Music & Martini Thursdays. Seasonal Wisteria Rooftop."),
+
+    ("Claire's on Cedros", "Solana Beach", "https://clairesoncedros.com",
+     "Iconic Cedros District brunch spot. Mon-Thu 7 AM-2:30 PM, Fri-Sun 7 AM-3 PM. Daytime only — weekend brunch crowd."),
+
     # ─── Encinitas / Cardiff ─────────────────────────────────────────────────
     ("The Third Corner", "Encinitas", "",
      "Wine bar in Encinitas — quiet, conversation-friendly. Wine tastings Tue + Thu 6-8 PM. HH Mon-Fri 3-6 PM."),
@@ -77,9 +86,6 @@ VENUE_DESCRIPTIONS: list[tuple[str, str, str, str]] = [
 
     ("Chart House Cardiff", "Encinitas", "https://www.chart-house.com/locations/cardiff-by-the-sea/",
      "Oceanfront seafood on Cardiff 101. Classic HH crowd + sunset views."),
-
-    ("Ki's Restaurant", "Encinitas", "https://www.kisrestaurant.com",
-     "Cliffside Cardiff organic/health food + bar. HH daily 3:30-6 PM (well drinks + appetizer pricing). Live music Fri 7-9 PM ('The Spell' — 70s/80s/90s classics)."),
 
     ("Pacific Coast Grill", "Encinitas", "https://www.pacificcoastgrill.com",
      "Oceanfront Cardiff 101 spot. Raw bar 3-4 PM (oyster window). Dinner 4-8:30 PM (9 Fri/Sat)."),

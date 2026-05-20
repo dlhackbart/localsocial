@@ -12,8 +12,10 @@ from config import SMTP_USER, SMTP_PASSWORD, ALERT_EMAIL_TO, ALERT_SMS_TO
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
 
-# SMS gateway (Verizon email-to-SMS)
-SMS_GATEWAY = "vtext.com"
+# SMS gateway (Verizon email-to-MMS).
+# vzwpix.com = MMS — carries multi-paragraph plan bodies.
+# vtext.com  = SMS — 160-char cap, too cryptic for the plan's venue+reason detail.
+SMS_GATEWAY = "vzwpix.com"
 
 # Phone number (strip +1 prefix)
 SMS_TO = ALERT_SMS_TO.replace("+1", "").replace("+", "") + f"@{SMS_GATEWAY}"

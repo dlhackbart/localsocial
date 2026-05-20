@@ -517,17 +517,144 @@ def _is_big_la_paloma(title: str) -> bool:
 
 # ─── Del Mar Fairgrounds ──────────────────────────────────────────────────────
 
-def scrape_fairgrounds() -> list[dict]:
-    """Del Mar Fairgrounds: SD County Fair, Toyota Summer Concert Series, racing.
+_FAIRGROUNDS_SKIP_PATTERNS = (
+    "board meeting",      # 22nd DAA Board Meeting — internal governance, not public
+    "daa meeting",
+)
 
-    Fairgrounds site uses dynamic JS loading — can't scrape via urllib.
-    Known schedule maintained here, refreshed periodically.
+
+def _fairgrounds_category(name: str) -> str:
+    """Classify a Fairgrounds event title into a scoring category."""
+    n = name.lower()
+    if any(k in n for k in ("racing", "race", "thoroughbred", "breeders", "championship", "tournament", "competition")):
+        return "meetups_clubs"
+    if "fair" in n and "bridal" not in n:  # "SD County Fair", not "Bridal Fair"
+        return "markets"
+    if any(k in n for k in ("expo", "show", "bazaar", "market", "festival", "sale")):
+        return "markets"
+    if any(k in n for k in ("exhibit", "art of", "gallery")):
+        return "markets"
+    # Default: artist/concert name
+    return "live_music_small"
+
+
+def _format_fairgrounds_time(start: int, end: int) -> str:
+    """Convert integer times like 1000/1700 to '10:00 AM - 5:00 PM'."""
+    def fmt(t: int) -> str | None:
+        if t is None or t == 0:
+            return None
+        hh, mm = divmod(int(t), 100)
+        if hh == 0:
+            return f"12:{mm:02d} AM"
+        if hh < 12:
+            return f"{hh}:{mm:02d} AM"
+        if hh == 12:
+            return f"12:{mm:02d} PM"
+        return f"{hh - 12}:{mm:02d} PM"
+    s, e = fmt(start), fmt(end)
+    if s and e and s != e:
+        return f"{s} - {e}"
+    return s or ""
+
+
+def _fetch_fairgrounds_api(today: date) -> list[dict]:
+    """Fetch live events from the Del Mar Fairgrounds JSON API."""
+    raw = fetch_url("https://www.delmarfairgrounds.com/api/events")
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except Exception as e:
+        print(f"[FAIRGROUNDS API] JSON parse failed: {e}")
+        return []
+    if not isinstance(data, list):
+        return []
+
+    events = []
+    seen: set[tuple[str, str]] = set()  # (date, name) — collapse parking/session duplicates
+    for ev in data:
+        name = (ev.get("Name") or "").strip()
+        if not name:
+            continue
+        if any(pat in name.lower() for pat in _FAIRGROUNDS_SKIP_PATTERNS):
+            continue
+        url = ev.get("URL") or ""
+        category = _fairgrounds_category(name)
+
+        # "The Sound" is a concert venue at the Fairgrounds booked by Belly Up.
+        # Same physical location but a distinct venue brand — keep it separate
+        # in the feed so it deduplicates correctly against Belly Up's own listing.
+        locations = [(l.get("Name") or "").strip() for l in (ev.get("Locations") or [])]
+        at_the_sound = any("the sound" in loc.lower() for loc in locations)
+        venue_name = "The Sound" if at_the_sound else "Del Mar Fairgrounds"
+
+        # Prefer sessions with real times; fall back to time-less entries.
+        items = ev.get("Items") or []
+        items_sorted = sorted(items, key=lambda it: 0 if it.get("StartTime") else 1)
+        for item in items_sorted:
+            item_name = (item.get("Name") or "").lower()
+            if "parking" in item_name:
+                continue
+            start = item.get("StartDate", "")[:10]
+            if not start:
+                continue
+            try:
+                ed = date.fromisoformat(start)
+            except ValueError:
+                continue
+            if ed < today or (ed - today).days > LOOKAHEAD_DAYS:
+                continue
+            key = (ed.isoformat(), name.lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            time_str = _format_fairgrounds_time(item.get("StartTime"), item.get("EndTime"))
+            events.append({
+                "title": name,
+                "date": ed.isoformat(),
+                "time": time_str,
+                "venue": venue_name,
+                "area": "Del Mar",
+                "source": url or "delmarfairgrounds.com",
+                "category": category,
+                "big_event": True,
+            })
+    return events
+
+
+def scrape_fairgrounds() -> list[dict]:
+    """Del Mar Fairgrounds — live JSON API + hardcoded summer supplement.
+
+    Primary: live fetch from https://www.delmarfairgrounds.com/api/events
+    (every event within LOOKAHEAD_DAYS, with real times + category).
+
+    Supplement: hardcoded Summer Concert Series, County Fair, and Thoroughbred
+    racing schedule. The live feed surfaces these close to showtime; the
+    hardcoded entries ensure they appear in the weekly plan months in advance
+    and survive a live-API outage. Merged by (date, title) — live wins.
 
     The Fairgrounds is HALF A MILE from the user's home — every event here
     is local and prominent. All events flagged big_event=True.
     """
     today = date.today()
-    events = []
+    events: list[dict] = []
+
+    # ─── Live API (primary source) ────────────────────────────────────────
+    live = _fetch_fairgrounds_api(today)
+    if live:
+        print(f"[FAIRGROUNDS API] Fetched {len(live)} sessions from live feed")
+        events.extend(live)
+    else:
+        print("[FAIRGROUNDS API] Live feed empty/failed — using hardcoded fallback only")
+
+    seen_keys = {(e["date"], e["title"].lower()) for e in events}
+
+    def _add(ev: dict) -> None:
+        key = (ev["date"], ev["title"].lower())
+        if key in seen_keys:
+            return
+        seen_keys.add(key)
+        events.append(ev)
 
     # ─── San Diego County Fair 2026 (June 10 - July 5) ────────────────────
     # Wednesday through Sunday only (closed Mon/Tue)
@@ -539,7 +666,7 @@ def scrape_fairgrounds() -> list[dict]:
         if current.weekday() < 5 or current.weekday() == 6:  # Mon=0..Sun=6; open Wed,Thu,Fri,Sat,Sun
             if current.weekday() in (2, 3, 4, 5, 6):
                 if current >= today and (current - today).days <= LOOKAHEAD_DAYS:
-                    events.append({
+                    _add({
                         "title": "San Diego County Fair",
                         "date": current.isoformat(),
                         "time": "11:00 AM - 11:00 PM",
@@ -570,7 +697,7 @@ def scrape_fairgrounds() -> list[dict]:
             ed = date.fromisoformat(d_str)
             if ed < today or (ed - today).days > LOOKAHEAD_DAYS:
                 continue
-            events.append({
+            _add({
                 "title": artist,
                 "date": d_str,
                 "time": time_str,
@@ -590,7 +717,7 @@ def scrape_fairgrounds() -> list[dict]:
     racing_end = date(2026, 9, 6)  # Labor Day typical close
 
     if racing_start >= today and (racing_start - today).days <= LOOKAHEAD_DAYS:
-        events.append({
+        _add({
             "title": "Del Mar Racing — Opening Day",
             "date": racing_start.isoformat(),
             "time": "2:00 PM",
@@ -607,7 +734,7 @@ def scrape_fairgrounds() -> list[dict]:
         if current.weekday() in (3, 4, 5, 6):  # Thu=3, Fri=4, Sat=5, Sun=6
             if current >= today and (current - today).days <= LOOKAHEAD_DAYS:
                 if current != racing_start:  # Opening Day already added
-                    events.append({
+                    _add({
                         "title": "Del Mar Racing",
                         "date": current.isoformat(),
                         "time": "2:00 PM" if current.weekday() == 4 else "2:00 PM",
@@ -1163,15 +1290,35 @@ def scrape_all() -> list[dict]:
     print("[SCRAPE] Del Mar Fairgrounds...")
     all_events.extend(scrape_fairgrounds())
 
-    # Dedupe by title + date
-    seen = set()
-    deduped = []
+    # Dedupe by normalized-artist + date. Scrapers produce different title
+    # forms for the same concert ("Vandelux" from the Fairgrounds API vs
+    # "Vandelux - California Tour" from Belly Up). We key on the leading
+    # artist name so both land on the same slot, then prefer the more
+    # specific venue — "The Sound" (a Belly-Up-managed room at the
+    # Fairgrounds) should win over Belly Up's generic listing of the same
+    # concert.
+    _VENUE_PRIORITY = {"the sound": 3, "del mar fairgrounds": 2, "del mar racetrack": 2}
+
+    def _priority(ev: dict) -> int:
+        return _VENUE_PRIORITY.get(ev.get("venue", "").lower(), 1)
+
+    def _artist_key(title: str) -> str:
+        t = title.lower()
+        # Cut at the first separator that typically introduces a tour name,
+        # supporting act, or subtitle.
+        for sep in (" - ", " – ", " — ", ": ", " featuring ", " feat. ", " feat ", " w/ ", " with "):
+            idx = t.find(sep)
+            if idx > 0:
+                t = t[:idx]
+        return t.strip()
+
+    by_key: dict[tuple[str, str], dict] = {}
     for ev in all_events:
-        key = f"{ev['title'].lower()}|{ev['date']}"
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(ev)
+        key = (_artist_key(ev["title"]), ev["date"])
+        existing = by_key.get(key)
+        if existing is None or _priority(ev) > _priority(existing):
+            by_key[key] = ev
+    deduped = list(by_key.values())
 
     # Sort by date
     deduped.sort(key=lambda e: e["date"])

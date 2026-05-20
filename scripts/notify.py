@@ -31,14 +31,18 @@ from daily_social_plan import (
 
 
 def send_sms(message: str, dry_run: bool = False) -> bool:
-    """Send SMS via Verizon email-to-SMS gateway."""
+    """Send MMS via Verizon email-to-MMS gateway (vzwpix.com).
+
+    No length cap — the gateway fragments long bodies into numbered parts
+    on delivery. Caller passes the full plan text.
+    """
     if dry_run:
         print(f"[SMS DRY-RUN] To: {SMS_TO}")
-        print(f"[SMS DRY-RUN] Body: {message}")
+        print(f"[SMS DRY-RUN] Body ({len(message)} chars):\n{message}")
         return True
 
     try:
-        msg = MIMEText(message[:160])
+        msg = MIMEText(message)
         msg["From"] = EMAIL_FROM
         msg["To"] = SMS_TO
         # No subject for SMS — it just shows the body
@@ -46,7 +50,7 @@ def send_sms(message: str, dry_run: bool = False) -> bool:
         with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.send_message(msg)
-        print(f"[SMS SENT] {message[:80]}...")
+        print(f"[SMS SENT] {len(message)} chars, preview: {message[:80]}...")
         return True
     except Exception as e:
         print(f"[SMS FAILED] {e}")
@@ -93,12 +97,12 @@ def send_email(subject: str, body: str, dry_run: bool = False) -> bool:
 
 
 def morning(dry_run: bool = False):
-    """8 AM — Morning Social Plan (full week in email, tonight in SMS)."""
+    """8 AM — Morning Social Plan. MMS gets the full weekly plan too (no 160-char cap)."""
     plans = generate_weekly_plan()
     today_plan = plans[0]
 
-    # SMS: tonight only (160 chars)
-    sms_text = format_sms(today_plan)
+    # MMS: tonight (rich) + full upcoming week, 5 picks/day with reasons
+    sms_text = format_sms(plans)
 
     # Email: full 7-day plan
     weekly_text = format_weekly_plan(plans)

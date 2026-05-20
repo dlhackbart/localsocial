@@ -145,14 +145,6 @@ VENUES = [
         ],
     },
     {
-        "name": "Ki's Restaurant", "area": "Encinitas",
-        "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
-        "happyHour": {"days": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"], "start": "3:30 PM", "end": "6:00 PM"},
-        "events": [
-            {"day": "Friday", "type": "live music — The Spell (70s/80s/90s classics)", "time": "7-9 PM", "broadAppeal": True},
-        ],
-    },
-    {
         "name": "Belly Up Tavern", "area": "Solana Beach",
         "repeatFriendly": False, "conversationFriendly": False, "energy": "high",
         "events": [
@@ -160,6 +152,26 @@ VENUES = [
             {"day": "Friday", "type": "80s dance night", "time": "8:00 PM", "broadAppeal": True},
             {"day": "Saturday", "type": "tribute band", "time": "8:00 PM", "broadAppeal": True},
             {"day": "Sunday", "type": "Sunday residency", "time": "7:00 PM", "broadAppeal": False},
+        ],
+    },
+    {
+        "name": "Carruth Cellars", "area": "Solana Beach",
+        "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
+        "events": [
+            {"day": "Tuesday", "type": "Trivia Night", "time": "6-8 PM", "broadAppeal": True},
+            {"day": "Wednesday", "type": "Acoustic Wednesdays", "time": "5-8 PM", "broadAppeal": True},
+            {"day": "Friday", "type": "Foodie Fridays", "time": "5-8 PM", "broadAppeal": True},
+            {"day": "Saturday", "type": "afternoon tastings", "time": "2-6 PM", "broadAppeal": True},
+            {"day": "Sunday", "type": "afternoon tastings", "time": "2-6 PM", "broadAppeal": True},
+        ],
+    },
+    {
+        "name": "Rustic Root", "area": "Solana Beach",
+        "repeatFriendly": True, "conversationFriendly": True, "energy": "medium",
+        "events": [
+            {"day": "Thursday", "type": "Live Music + Martini Thursdays", "time": "6-9 PM", "broadAppeal": True},
+            {"day": "Friday", "type": "cocktail lounge scene", "time": "5-9 PM", "broadAppeal": True},
+            {"day": "Saturday", "type": "Wisteria Rooftop dinner", "time": "5-9 PM", "broadAppeal": True},
         ],
     },
     {
@@ -564,8 +576,15 @@ def generate_plan(today=None, home_area=None, zones=None):
         if ev.get("venue") in ("Belly Up Tavern", "Del Mar Plaza"):
             score += 1
 
-        # DEL MAR FAIRGROUNDS: 1/2 mile from home — always prioritize
-        if "fairgrounds" in ev.get("venue", "").lower() or ev.get("venue") == "Del Mar Racetrack":
+        # DEL MAR FAIRGROUNDS: 1/2 mile from home — always prioritize.
+        # "The Sound" is the Belly-Up-run concert room at the Fairgrounds —
+        # same locality bonus, distinct venue brand.
+        venue_name = ev.get("venue", "")
+        if (
+            "fairgrounds" in venue_name.lower()
+            or venue_name == "Del Mar Racetrack"
+            or venue_name == "The Sound"
+        ):
             score += 3
             if not reasons:
                 reasons.append("Right in your backyard")
@@ -734,32 +753,94 @@ def _short_venue(name):
             .strip())
 
 
-def format_sms(plan):
-    """Format a short SMS-friendly version (under 160 chars)."""
+def _pick_context_line(pick):
+    """One short line explaining WHY to go: music, HH, locals, crowd vibe."""
+    bits = []
+    event_type = (pick.get("event_type") or "").strip()
+    # Name the main draw
+    if event_type and event_type.lower() != "happy hour":
+        bits.append(event_type)
+    hh_note = pick.get("happy_hour_note")
+    if hh_note:
+        # "Happy hour 3:00 PM-6:00 PM" -> "HH 3-6 PM"
+        bits.append(hh_note.replace("Happy hour ", "HH ").replace(":00", ""))
+    # Crowd vibe
+    vibe = _crowd_desc(pick)
+    if vibe and vibe != "standard":
+        bits.append(vibe)
+    return " · ".join(bits)
+
+
+def _mms_day_block(plan, *, full: bool) -> list[str]:
+    """Render one day's 5 picks. full=True for tonight (adds descriptions),
+    full=False for upcoming days (compact but still explains why)."""
+    lines = []
+    date_short = plan["date"][5:]  # MM-DD
+    if full:
+        header = f"TONIGHT — {plan['day_name'].upper()} {date_short}"
+    else:
+        header = f"{plan['day_name'].upper()} {date_short}"
+    priority = plan.get("priority", "Low")
+    if priority != "Low":
+        header += f"  [{priority}]"
+    lines.append(header)
+
     if not plan["has_events"]:
-        return f"{plan['day_name']}: No events today."
+        lines.append("  No events.")
+        lines.append("")
+        return lines
 
-    picks = plan["picks"]
-    short_day = plan["day_name"][:3]
+    for i, pick in enumerate(plan["picks"][:5], start=1):
+        big = " ★" if pick.get("big_event") else ""
+        venue = _short_venue(pick["venue"])
+        time_str = pick.get("time", "")
+        lines.append(f"{i}) {venue} — {time_str}{big}")
+        ctx = _pick_context_line(pick)
+        if ctx:
+            lines.append(f"   {ctx}")
+        if full:
+            desc = pick.get("description", "")
+            if desc:
+                # Trim description to one readable line
+                lines.append(f"   {desc[:140]}")
+            reason = pick.get("reason", "")
+            if reason:
+                lines.append(f"   → {reason}")
+    lines.append("")
+    return lines
 
-    # First line: top pick + overall call
-    p = picks[0]
-    msg = f"{short_day}: 1){_short_venue(p['venue'])} {p['time']}"
 
-    # Add picks 2-3 if they fit
-    for i, pick in enumerate(picks[1:3], start=2):
-        addition = f" {i}){_short_venue(pick['venue'])} {pick['time']}"
-        if len(msg) + len(addition) + 25 <= 160:  # reserve space for call line
-            msg += addition
+def format_sms(plan_or_plans):
+    """Rich multi-day MMS body. Accepts a single plan dict (backwards-compat,
+    tonight-only) or a list of 7 daily plans for full-week morning notification.
 
-    msg += f" | {plan['call']}, {plan['priority']}"
+    Tonight gets venue + time + event + HH/vibe + description + reason.
+    Upcoming 6 days each get 5 picks with a short 'why to go' context line.
+    """
+    plans = plan_or_plans if isinstance(plan_or_plans, list) else [plan_or_plans]
+    if not plans:
+        return "No plan available."
 
-    # Add log link if it fits
-    log_note = " | Log: dlhackbart.github.io/localsocial"
-    if len(msg) + len(log_note) <= 160:
-        msg += log_note
+    today_plan = plans[0]
+    if not today_plan["has_events"]:
+        header = f"{today_plan['day_name']}: No events today."
+    else:
+        header = (
+            f"{today_plan['day_name']} Social Plan — "
+            f"{today_plan['area_str']} · {today_plan['call']}"
+        )
 
-    return msg[:160]
+    lines = [header, ""]
+    lines.extend(_mms_day_block(today_plan, full=True))
+
+    if len(plans) > 1:
+        lines.append("-- COMING UP --")
+        lines.append("")
+        for plan in plans[1:]:
+            lines.extend(_mms_day_block(plan, full=False))
+
+    lines.append("Log: dlhackbart.github.io/localsocial")
+    return "\n".join(lines)
 
 
 def generate_weekly_plan(start_date=None, home_area=None, zones=None):
@@ -814,6 +895,59 @@ def _format_day_picks(plan, is_today=False):
     return lines
 
 
+_FAIRGROUNDS_VENUES = {"Del Mar Fairgrounds", "Del Mar Racetrack", "The Sound"}
+
+
+def _fairgrounds_week_section(plans):
+    """Build 'DEL MAR FAIRGROUNDS THIS WEEK' — every Fairgrounds/Racetrack/The
+    Sound event in the 7-day window. Reads raw scraped events so weekend +
+    concert listings can't be hidden by artist-dedup elsewhere.
+
+    "The Sound" is the Belly-Up-managed concert venue physically at the
+    Fairgrounds — listed under the venue's real name, not "Fairgrounds".
+    """
+    if not plans or not SCRAPED_FILE.exists():
+        return []
+    try:
+        data = json.loads(SCRAPED_FILE.read_text())
+        all_events = data.get("events", [])
+    except (json.JSONDecodeError, KeyError):
+        return []
+
+    start = date.fromisoformat(plans[0]["date"])
+    end = date.fromisoformat(plans[-1]["date"])
+
+    by_date: dict[str, list[dict]] = {}
+    for e in all_events:
+        venue = e.get("venue", "")
+        if venue not in _FAIRGROUNDS_VENUES:
+            continue
+        date_str = e.get("date", "")
+        try:
+            ed = date.fromisoformat(date_str)
+        except ValueError:
+            continue
+        if ed < start or ed > end:
+            continue
+        by_date.setdefault(date_str, []).append(e)
+
+    if not by_date:
+        return []
+
+    lines = ["=" * 50, "DEL MAR FAIRGROUNDS THIS WEEK", "(half a mile from home)", "=" * 50, ""]
+    for date_str in sorted(by_date.keys()):
+        d = date.fromisoformat(date_str)
+        day = DAY_NAMES[(d.weekday() + 1) % 7]
+        weekend = " ★" if d.weekday() in (4, 5, 6) else ""  # Fri/Sat/Sun
+        lines.append(f"{day.upper()} {date_str[5:]}{weekend}")
+        for e in by_date[date_str]:
+            time_str = e.get("time", "") or "time TBA"
+            venue = e.get("venue", "Del Mar Fairgrounds")
+            lines.append(f"  • [{venue}] {e['title']} — {time_str}")
+        lines.append("")
+    return lines
+
+
 def format_weekly_plan(plans):
     """Format the full 7-day Social Plan (for email)."""
     lines = []
@@ -863,6 +997,9 @@ def format_weekly_plan(plans):
 
     for plan in plans[1:]:
         lines.extend(_format_day_picks(plan, is_today=False))
+
+    # Del Mar Fairgrounds — always list every event in the week's window
+    lines.extend(_fairgrounds_week_section(plans))
 
     lines.append("Log last night: https://dlhackbart.github.io/localsocial/")
 
