@@ -1,25 +1,37 @@
 # Local Social
 
-**Where should I go tonight?**
+**What live music is happening this week?**
 
-A location-aware, goal-based venue and event recommendation engine for San Diego's North County coast. Local Social scrapes real event data from local venues, scores everything against your social goals, and delivers a ranked 7-day Social Plan via SMS and email every morning.
+A weekly **live-music reminder** for San Diego's North County coast (Del Mar → Oceanside). Local Social scrapes real lineups straight from the venues, tags every show with how trustworthy the data is, and emails + texts you the week's music every late afternoon.
 
-Not a dating app publicly, but optimizes for connection (including dating) internally. Uses "Social Plan" terminology — concise, practical, adult.
+> **Reoriented 2026-06-02.** Previously a daily all-categories "Social Plan"; now a weekly live-music-first reminder. The mobile app still reflects the older daily-plan shape.
 
 ## How It Works
 
-Every day at 7 AM, the scraper pulls live event data from 6 North County sources. At 8 AM, you get a text and email with up to 5 ranked picks for tonight plus the next 6 days. At 4 PM, a go-time nudge. At 9:30 PM, a logging prompt.
+Once a week (Monday 7 AM) the scraper pulls this week's live music from the North County coast and caches it. Every afternoon (4 PM) you get an email + text with the week's lineup — music first, then a reminder list of the usual spots.
 
 ```
-7:00 AM  — Scrape all sources → data/scraped_events.json (94+ events)
-8:00 AM  — SMS: tonight's top 3  |  Email: full 7-day Weekly Social Plan
-4:00 PM  — SMS: "GO TIME" + tonight  |  Email: tonight's picks
-9:30 PM  — SMS: "Did you go out tonight?"
+MON 7:00 AM  — Scrape live music → data/weekly_music.json (the week's lineup)
+DAILY 4:00 PM — Email + SMS: 🎵 live music this week, then 📍 the usual spots
 ```
 
-The daily scrape re-validates all 30 days of event data. Each upcoming day gets more accurate as it approaches — a Thursday event has been checked Mon, Tue, Wed, and Thu morning before you see the 4 PM go-time nudge.
+The lineup only changes weekly, so the daily send is a reminder of the same cached week. Every show is tagged so you know what to trust:
+
+- **✅** scraped straight from the venue — rely on it
+- **~** from a secondary listing — worth a glance
+- **⚠** unverified / manual — double-check before you go
 
 ## Quick Start
+
+### Notifications (Python — runs on your machine)
+```bash
+python scripts/scrape_music.py               # Probe all music sources now
+python scripts/notify.py weekly              # Rebuild this week's lineup → data/weekly_music.json
+python scripts/notify.py --dry-run reminder  # Preview the email + SMS without sending
+python scripts/notify.py reminder            # Send the real email + SMS
+```
+
+To add shows the auto-scrapers can't reach (JS-only venues like The Sound, Coyote, The Roxy), drop entries into `data/music_manual.json` (template: `data/music_manual.example.json`) — they appear as ⚠ until you verify them.
 
 ### Mobile App (Expo)
 ```bash
@@ -27,14 +39,6 @@ npm install
 npm start            # Expo dev server (scan QR with Expo Go)
 npm run ios          # iOS simulator
 npm run android      # Android emulator
-```
-
-### Notifications (Python — runs on your machine)
-```bash
-python scripts/scrape_events.py              # Scrape all sources now
-python scripts/daily_social_plan.py --week   # Preview 7-day plan
-python scripts/notify.py --dry-run morning   # Preview SMS + email without sending
-python scripts/notify.py morning             # Send real SMS + email
 ```
 
 ### Environment
@@ -45,20 +49,31 @@ cp .env.example .env
 
 Supabase is optional. Without it, the app runs fully local. Notifications use Gmail SMTP credentials from `spy_timing/config.py`.
 
-## Coverage Area
+## Coverage Area & Music Sources
 
-Four areas in San Diego County's North County coast:
+The North County coast, **Del Mar → Oceanside** (Del Mar, Solana Beach, Cardiff, Encinitas, Leucadia, Carlsbad, Oceanside).
 
-| Area | Adjacent Zones |
-|------|----------------|
-| Del Mar | Solana Beach, Encinitas |
-| Solana Beach | Del Mar, Encinitas |
-| Encinitas | Solana Beach, Carlsbad |
-| Carlsbad | Encinitas |
+**Live-music sources scraped directly (✅):**
 
-**Key local knowledge:** Monarch Ocean Pub is inside Del Mar Plaza — same physical location. Treated as one venue in scoring and deduplication.
+| Venue | City | What it gives |
+|-------|------|---------------|
+| Del Mar Plaza | Del Mar | **Monarch — Inside** (pub live music, Wed/Fri/Sun) + **Monarch — Patio / Ocean View Deck** (Seaside Sessions, Thu/Sat). Two distinct schedules, real performers. |
+| Belly Up | Solana Beach | Marquee touring acts (times approximate — default 8 PM) |
+| The Kraken | Cardiff | Local bands |
+| Pour House | Oceanside | Oceanside's main music room |
 
-## Event Sources
+**Not auto-scrapeable (JS / ticketing widgets)** — add via `data/music_manual.json`: The Sound, Coyote (Carlsbad), The Roxy (Encinitas), Oceanside Pier Amphitheatre, Del Mar Fairgrounds, Belching Beaver. Carlsbad has no scrapeable in-city touring room; its big acts come through Belly Up / The Sound just outside city limits.
+
+---
+
+> **⚠ Everything below documents the LEGACY daily "Social Plan" system** (scoring
+> engine, 6-source daily scrape, 8 AM / 4 PM / 9:30 PM sends, mobile app). It is kept
+> for reference and the mobile app, but the live product is the weekly music reminder
+> described above. See `CLAUDE.md` for the current pipeline.
+
+---
+
+## Event Sources (legacy daily pipeline)
 
 6 sources scraped daily, producing 94+ events over a 30-day window:
 
