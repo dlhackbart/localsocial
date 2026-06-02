@@ -27,10 +27,13 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # ─── Area data ───────────────────────────────────────────────────────────────
 
 AREAS = {
-    "Del Mar": ["Solana Beach", "Encinitas"],
-    "Solana Beach": ["Del Mar", "Encinitas"],
-    "Encinitas": ["Solana Beach", "Carlsbad"],
-    "Carlsbad": ["Encinitas"],
+    "Del Mar": ["Solana Beach", "Cardiff", "Encinitas"],
+    "Solana Beach": ["Del Mar", "Cardiff", "Encinitas"],
+    "Cardiff": ["Solana Beach", "Encinitas"],
+    "Encinitas": ["Cardiff", "Solana Beach", "Leucadia", "Carlsbad"],
+    "Leucadia": ["Encinitas", "Carlsbad"],
+    "Carlsbad": ["Encinitas", "Leucadia", "Oceanside"],
+    "Oceanside": ["Carlsbad"],
 }
 
 DEFAULT_HOME_AREA = "Del Mar"
