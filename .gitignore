@@ -23,6 +23,13 @@ scripts/scrape.log
 data/scraped_events.json
 data/venue_schedules.json
 
+# Weekly live-music cache (regenerated every Monday) + its rolling backups
+data/weekly_music.json
+data/weekly_music_backups/
+
+# Local scheduled-task XML backups (machine-specific)
+scripts/task_backups_*/
+
 # Venue registry — seeded from scripts/seed_venue_descriptions.py,
 # accumulates discovered subpages + per-URL success stats at runtime
 data/venue_urls.json

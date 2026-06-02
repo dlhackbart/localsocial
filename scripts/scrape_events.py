@@ -36,8 +36,8 @@ VENUE_SCHEDULES_FILE = DATA_DIR / "venue_schedules.json"
 # How far ahead to look
 LOOKAHEAD_DAYS = 30
 
-# North County areas we care about
-NC_AREAS = {"Del Mar", "Solana Beach", "Encinitas", "Carlsbad"}
+# North County areas we care about (Del Mar -> Oceanside coast)
+NC_AREAS = {"Del Mar", "Solana Beach", "Cardiff", "Encinitas", "Leucadia", "Carlsbad", "Oceanside"}
 
 
 def fetch_url(url: str) -> str | None:

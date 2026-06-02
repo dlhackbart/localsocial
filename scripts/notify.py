@@ -1,13 +1,17 @@
 """
 Local Social notification sender.
 
-Sends the Daily Social Plan via SMS (short nudge) + email (full plan).
+Live-music reminder (current product) + legacy Social Plan sends.
 
 Usage:
+    python notify.py weekly      # Mon refresh — re-scrape the week into weekly_music.json
+    python notify.py reminder    # Daily ~4 PM — email + SMS this week's live music
+    python notify.py --dry-run reminder  # Preview the email + SMS without sending
+
+    # Legacy (no longer scheduled):
     python notify.py morning     # 8 AM Social Plan
     python notify.py gotime      # 4 PM go-time reminder
     python notify.py log         # 9:30 PM logging prompt
-    python notify.py --dry-run morning   # Preview without sending
 """
 
 import smtplib
@@ -28,6 +32,8 @@ from daily_social_plan import (
     format_full_plan, format_log_prompt, format_sms, format_weekly_plan,
     generate_plan, generate_weekly_plan,
 )
+from weekly_music import build_weekly_music, load_weekly_music
+from format_music_email import format_music_email, format_music_sms
 
 
 def send_sms(message: str, dry_run: bool = False) -> bool:
@@ -142,6 +148,35 @@ def log_prompt(dry_run: bool = False):
     send_sms(sms_text, dry_run=dry_run)
 
 
+def weekly(dry_run: bool = False):
+    """Monday refresh — re-scrape the week's live music into data/weekly_music.json.
+
+    With --dry-run, still builds the file (it's the source of truth) but skips any send.
+    """
+    week = build_weekly_music(verbose=True)
+    n = len(week.get("events", []))
+    print(f"[WEEKLY] refreshed — {n} events for week of {week.get('week_of')}")
+
+
+def reminder(dry_run: bool = False):
+    """Daily late-afternoon reminder — email + SMS of THIS week's live music (cached)."""
+    week = load_weekly_music()
+    if week is None:
+        # No cache yet — build it now so the operator still gets something accurate.
+        print("[REMINDER] no weekly cache found — building it now")
+        week = build_weekly_music(verbose=True)
+
+    email_body = format_music_email(week)
+    sms_body = format_music_sms(week)
+
+    subject = "🎵 This week's live music — Del Mar to Oceanside"
+    if week.get("_stale"):
+        subject = f"🎵 Live music (⚠ {week.get('_age_days','?')}d old) — Del Mar to Oceanside"
+
+    send_email(subject, email_body, dry_run=dry_run)
+    send_sms(sms_body, dry_run=dry_run)
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     dry_run = "--dry-run" in sys.argv
@@ -158,9 +193,13 @@ def main():
         gotime(dry_run=dry_run)
     elif action == "log":
         log_prompt(dry_run=dry_run)
+    elif action == "weekly":
+        weekly(dry_run=dry_run)
+    elif action == "reminder":
+        reminder(dry_run=dry_run)
     else:
         print(f"Unknown action: {action}")
-        print("Valid actions: morning, gotime, log")
+        print("Valid actions: weekly, reminder, morning, gotime, log")
         sys.exit(1)
 
 

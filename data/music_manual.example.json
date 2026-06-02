@@ -1,0 +1,39 @@
+[
+  {
+    "_comment": "TEMPLATE — copy entries you want into music_manual.json (this .example file is ignored). These are the venues the auto-scrapers can't reach (JS sites / ticketing widgets). Anything here shows in the email as ⚠ 'unverified — double-check' until you change confidence to 'medium' or 'high'. Delete this _comment object before use.",
+    "venue": "_template_only"
+  },
+  {
+    "venue": "The Sound",
+    "city": "Del Mar",
+    "area": "Del Mar",
+    "date": "2026-06-13",
+    "start": "8 PM",
+    "artist": "Example Headliner",
+    "genre": "indie rock",
+    "description": "Touring act — Del Mar Fairgrounds room run by the Belly Up team",
+    "source": "thesoundsd.com",
+    "source_url": "https://thesoundsd.com/",
+    "confidence": "low"
+  },
+  {
+    "venue": "Coyote Bar & Grill",
+    "city": "Carlsbad",
+    "area": "Carlsbad",
+    "date": "2026-06-14",
+    "start": "7 PM",
+    "artist": "Example Local Band",
+    "genre": "blues",
+    "description": "In-Carlsbad live music",
+    "confidence": "low"
+  },
+  {
+    "venue": "The Roxy",
+    "city": "Encinitas",
+    "area": "Encinitas",
+    "date": "2026-06-14",
+    "start": "9 PM",
+    "artist": "Example Act",
+    "confidence": "low"
+  }
+]
