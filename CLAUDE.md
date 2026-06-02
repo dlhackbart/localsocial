@@ -1,22 +1,45 @@
 # Local Social — Developer Guide
 
+> **⚡ REORIENTED 2026-06-02 — now a WEEKLY LIVE-MUSIC-FIRST reminder.**
+> The product is no longer a daily all-categories "Social Plan." It is a weekly
+> live-music lineup (Del Mar → Oceanside) scraped once a week and emailed + texted
+> daily as a reminder. The old daily-plan code (`daily_social_plan.py`,
+> `notify.py morning/gotime/log`) still exists but is **no longer scheduled** — see
+> "Current Product" below. The mobile app sections further down are unchanged.
+
 ## What This Is
 
-Local venue/event recommendation system for San Diego North County. Two parts:
-1. **Python notification pipeline** — scrapes events daily, scores them, sends SMS + email with a 7-day Social Plan
-2. **React Native app (Expo 54)** — mobile UI with Tonight / Log / Profile tabs, subscription gating
+Local live-music + venue system for the San Diego North County coast. Two parts:
+1. **Python pipeline (LIVE)** — scrapes live music once a week, caches it, and sends
+   a music-first email + SMS reminder every late afternoon.
+2. **React Native app (Expo 54)** — mobile UI with Tonight / Log / Profile tabs
+   (predates the reorientation; still daily-plan-shaped).
 
-## Run
+## Current Product — weekly live-music reminder
 
-### Notifications (the part that's live and running)
+**Cadence:** scrape ONCE on Monday → cache `data/weekly_music.json` → read & send
+that cache daily. The lineup only changes weekly; the daily send is a reminder.
+
 ```bash
-python scripts/scrape_events.py              # Scrape 6 sources → data/scraped_events.json
-python scripts/daily_social_plan.py          # Tonight's plan
-python scripts/daily_social_plan.py --week   # Full 7-day plan
-python scripts/notify.py --dry-run morning   # Preview without sending
-python scripts/notify.py morning             # Send SMS + email (weekly plan)
-python scripts/notify.py gotime             # Send go-time (tonight only)
-python scripts/notify.py log                # Send logging prompt
+python scripts/scrape_music.py                 # Probe all music sources, print summary
+python scripts/notify.py weekly                # Mon refresh → rebuild data/weekly_music.json
+python scripts/notify.py --dry-run reminder    # Preview the email + SMS without sending
+python scripts/notify.py reminder              # Send email + SMS of this week's live music
+```
+
+**Sourcing model — every event carries provenance + a confidence marker:**
+- `✅` (tier 1) scraped straight from the venue — rely on it
+- `~` (tier 2) secondary listing / aggregator — worth a glance
+- `⚠` (tier 3) manual overlay / unverified — double-check
+
+`data/music_manual.json` is the operator overlay for venues the auto-scrapers can't
+reach (JS-only sites); entries show as `⚠` until confidence is raised. Template:
+`data/music_manual.example.json`. **Never fabricate a lineup — omit a dry venue.**
+
+### Legacy (kept, NOT scheduled)
+```bash
+python scripts/notify.py morning|gotime|log    # old daily Social Plan sends
+python scripts/daily_social_plan.py [--week]    # old scoring engine (still imported for VENUES)
 ```
 
 ### Mobile App
@@ -26,15 +49,22 @@ npm install && npm start   # Expo Go
 
 ## Key Files
 
-### Notification Pipeline (Python — `scripts/`)
+### Music pipeline (Python — `scripts/`) — CURRENT
 | File | Purpose |
 |------|---------|
-| `scripts/scrape_events.py` | Scrapes 6 North County sources (Belly Up, Del Mar Plaza, Seaside Sessions, Encinitas 101, North Coast Rep, La Paloma Theatre) |
-| `scripts/daily_social_plan.py` | Python scoring engine with 10 venues + scraped events. Generates 7-day plan with up to 5 ranked picks per day |
-| `scripts/notify.py` | Sends SMS (Verizon gateway) + email (Gmail SMTP with dark HTML) |
+| `scripts/scrape_music.py` | **Live-music scrapers** (Del Mar → Oceanside). One fn per source → normalized dicts with `tier`/`confidence`/`marker`. `scrape_all_music()` orchestrates with per-source try/except + dedupe. Loads `data/music_manual.json` overlay. |
+| `scripts/weekly_music.py` | `build_weekly_music()` writes `data/weekly_music.json` (+ dated backups in `data/weekly_music_backups/`); `load_weekly_music()` with staleness flag; `build_reminders()` from `daily_social_plan.VENUES`. |
+| `scripts/format_music_email.py` | `format_music_email()` (music-first → REMINDERS → legend) + `format_music_sms()` (condensed). |
+| `scripts/notify.py` | Actions: **`weekly`** (refresh cache), **`reminder`** (daily email+SMS) — plus legacy `morning/gotime/log`. Email = Gmail SMTP; SMS = Verizon MMS gateway. |
 | `scripts/notify_config.py` | SMTP credentials — imports from `spy_timing/config.py` |
-| `scripts/discover_city.py` | Auto-discover event sources for any US city (67 URL patterns + Claude Haiku LLM) |
-| `scripts/run_*.bat` | Windows scheduled task launchers |
+| `scripts/run_notify_reminder.bat` / `run_weekly_music.bat` | Scheduled-task launchers for the new pipeline (weekly batch logs to its OWN `weekly_music.log`, NOT the legacy `scrape.log`). |
+
+### Legacy pipeline (Python — `scripts/`) — kept, not scheduled
+| File | Purpose |
+|------|---------|
+| `scripts/scrape_events.py` | Old daily multi-category scraper → `data/scraped_events.json`. (`NC_AREAS` now includes Oceanside/Cardiff/Leucadia.) |
+| `scripts/daily_social_plan.py` | Old scoring engine + `VENUES`/`AREAS` (still imported by `weekly_music.py` for the reminders list). `AREAS` graph extended to Oceanside/Cardiff/Leucadia. |
+| `scripts/discover_city.py` | Auto-discover event sources for any US city |
 
 ### Mobile App (TypeScript — `src/` + `app/`)
 | File | Purpose |
@@ -53,35 +83,34 @@ npm install && npm start   # Expo Go
 | `supabase/schema.sql` | Full Postgres schema (7 tables) |
 | `supabase/functions/sources/index.ts` | Edge Function (proxy, discover, add, list) |
 
-## Scheduled Tasks (Windows)
+## Scheduled Tasks (Windows) — CURRENT
 
-| Task | Time | Action |
+| Task | When | Action |
 |------|------|--------|
-| `LocalSocial_Scrape_7am` | 7:00 AM | Scrape all 6 sources |
-| `LocalSocial_Morning_8am` | 8:00 AM | SMS (tonight top 3) + email (7-day weekly plan) |
-| `LocalSocial_GoTime_4pm` | 4:00 PM | SMS ("GO TIME" + tonight) + email (tonight only) |
-| `LocalSocial_LogPrompt_930pm` | 9:30 PM | SMS only ("Did you go out?") |
+| `LocalSocial_WeeklyMusic_Mon0700` | Mon 7:00 AM | `notify.py weekly` → rebuild `data/weekly_music.json` |
+| `LocalSocial_Reminder_1600` | Daily 4:00 PM | `notify.py reminder` → email + SMS this week's music |
 
-## Event Sources (6 active)
+Tasks run via `wscript.exe C:\Users\dlhac\bin\run_hidden.vbs <batch>` as the
+interactive user (least-priv). **Disabled** (superseded): `LocalSocial_Scrape_7am`,
+`LocalSocial_Morning_8am`, `LocalSocial_GoTime_4pm`. XML backups of the old tasks
+live in `scripts/task_backups_*/` (gitignored).
 
-| Source | Method | Data quality |
-|--------|--------|-------------|
-| Belly Up Tavern | JS `display` field extraction | Artist names, dates. Big-show detection. |
-| Del Mar Plaza | JSON-LD structured data | Seaside Sessions + Monarch performers by name |
-| Seaside Sessions | Extracted from Plaza scrape | Named artist + genre per date |
-| Encinitas 101 | JSON-LD + known schedule | Street fairs, cruise nights, Taste of Encinitas |
-| North Coast Rep | JSON-LD + known schedule | Theater runs with opening dates |
-| La Paloma Theatre | Known schedule (Veezi JS widget, can't scrape via urllib) | Film titles, times, special events. Refresh manually. |
+## Music Sources (Del Mar → Oceanside)
 
-### Sources investigated but not viable
-| Source | Why not |
-|--------|---------|
-| Mr. Peabody's (Encinitas) | Domain for sale — closed |
-| Salty Bear (Encinitas) | Domain not found |
-| Encinitas city gov | 403 blocked |
-| Lux Art Institute | JS-heavy, timeout |
-| SD Union-Tribune / Del Mar Times | Redirects to SDUT, blocked by bot protection |
-| Visit Carlsbad | JS-rendered, no content without browser |
+Confirmed **Tier-1** (✅ scraped directly, server-rendered/JSON, verified June 2026):
+
+| Source | City | Method | Notes |
+|--------|------|--------|-------|
+| **Del Mar Plaza** | Del Mar | Tribe REST `/wp-json/tribe/events/v1/events` | **Monarch split:** `venue="Monarch Ocean Pub"`+cat Music = INSIDE (Wed/Fri/Sun 4 PM); `venue="Ocean View Deck"` = PATIO / Seaside Sessions (Thu/Sat 5 PM). Filter cat `Music`. |
+| **Belly Up** | Solana Beach | reuse `scrape_events.scrape_belly_up` (display-field) | Touring acts. **Times default to 8 PM (approximate).** |
+| **Pour House** | Oceanside | Squarespace `?format=json` `upcoming[]` | `startDate` is ms-epoch **UTC** → convert to PT. |
+| **The Kraken** | Cardiff | Tribe REST API | Whole calendar tagged `Music`; filter noise by title (`_NON_MUSIC`). |
+
+**Tier-2/3 gaps (NOT auto-scraped — operator embellishes via `music_manual.json`):**
+The Sound (JS + Ticketmaster), Coyote Bar & Grill Carlsbad (DNS/cert issues),
+The Roxy Encinitas (JS), Oceanside Pier Amphitheatre / Del Mar Fairgrounds
+(Ticketmaster — need API key), Belching Beaver (no event page). Carlsbad has no
+scrapeable in-city touring room; the big acts come through Belly Up / The Sound.
 
 ## Scoring Quick Reference
 
@@ -109,6 +138,9 @@ Enrichment happens per-date — if the scrape doesn't have a performer for a spe
 
 ## Local Knowledge (Important)
 
+- **Monarch has TWO live-music streams, accurate from the Del Mar Plaza calendar:**
+  - **INSIDE** — `venue="Monarch Ocean Pub"`, "Live Music – Monarch Ocean Pub – <artist>", Wed/Fri/Sun ~4–7 PM (Ben Benavente, Christian Taylor, Lee Melton).
+  - **PATIO / Ocean View Deck** — `venue="Ocean View Deck"`, "Seaside Sessions – <artist>", Thu/Sat ~5–7 PM (Dulaney & Co., Tower 7). Different hours + performers.
 - **Monarch Ocean Pub is inside Del Mar Plaza** — same building, same location
 - **Seaside Sessions** happen on the Ocean View Deck at Del Mar Plaza (Wed + Fri, 5-7 PM)
 - **Belly Up** is only worth calling out when the show materially improves the night
@@ -126,38 +158,31 @@ python scripts/discover_city.py --list             # List all discovered cities
 
 Probes: CivicPlus, WordPress, LibCal, visitor bureaus, downtown associations, Eventbrite, + Claude Haiku for city-specific venues/theaters/newspapers. Validated sources saved to `data/city_sources/{slug}.json`.
 
-## Data Flow
+## Data Flow — CURRENT
 
 ```
-7:00 AM: scrape_events.py
-  → fetch Belly Up (JS display fields)
-  → fetch Del Mar Plaza (JSON-LD)
-  → known Seaside Sessions schedule
-  → fetch Encinitas 101 (JSON-LD)
-  → fetch North Coast Rep (JSON-LD)
-  → known La Paloma schedule
-  → dedupe → save data/scraped_events.json (94+ events, 30 days)
+MON 7:00 AM: notify.py weekly → weekly_music.build_weekly_music()
+  → scrape_music.scrape_all_music()
+      → Del Mar Plaza Tribe API   → Monarch INSIDE + Ocean View Deck PATIO
+      → Pour House (Squarespace)  → Oceanside live music
+      → The Kraken (Tribe API)    → Cardiff bands
+      → Belly Up (legacy scraper) → Solana Beach touring acts
+      → data/music_manual.json    → operator overlay (⚠ until verified)
+      → dedupe + sort by (date, time)
+  → back up previous weekly_music.json → weekly_music_backups/
+  → write data/weekly_music.json {week_of, generated_at, events, reminders, source_report}
 
-8:00 AM: notify.py morning
-  → generate_weekly_plan() (7 days)
-    → for each day:
-      → score static venues (10 venues × day-of-week match)
-      → extract Monarch/Seaside performers from scraped data
-      → enrich static venues with real performer names
-      → score scraped events (+6 base, +4 big, +2 music)
-      → merge + sort by score
-      → dedupe by physical location (Monarch=Plaza)
-      → top 5 picks
-  → format SMS (tonight top 3, 160 chars)
-  → format email (tonight full detail + 6 upcoming days compact)
-  → send via Gmail SMTP → phone@vtext.com + email
-
-4:00 PM: notify.py gotime
-  → generate tonight only → SMS + email
-
-9:30 PM: notify.py log
-  → SMS: "Did you go out tonight?"
+DAILY 4:00 PM: notify.py reminder
+  → load_weekly_music() (flags _stale if ≥8 days old)
+  → format_music_email():  🎵 music by day (Del Mar→Oceanside, ✅/~/⚠)
+                           → 📍 REMINDERS (usual spots by area)
+                           → source-key legend
+  → format_music_sms():    condensed music-only week view
+  → send email (Gmail SMTP) + SMS (Verizon MMS gateway)
 ```
+
+(Legacy daily flow — `scrape_events.py` 7 AM, `notify.py morning/gotime/log` —
+remains in the tree but its scheduled tasks are disabled.)
 
 ## Conventions
 
