@@ -264,6 +264,95 @@ def scrape_belly_up_music() -> list[dict]:
     return out
 
 
+# ─── Source 5: Del Mar Fairgrounds + The Sound (reuse legacy API scraper) ─────
+
+# Del Mar Fairgrounds category -> how the music-first email should describe it.
+# "The Sound" is its own concert brand (always music); the Fairgrounds proper
+# also runs concerts plus non-music slates (County Fair, expos, racing). The
+# operator is half a mile away and wants EVERY Fairgrounds event visible weekly
+# (esp. weekends) — see memory "Del Mar Fairgrounds + The Sound visibility" — so
+# we surface them all, tagging non-music ones with a clear descriptor.
+_FAIRGROUNDS_CATEGORY_DESC = {
+    "live_music_small": "Concert",
+    "markets": "Fair / Expo / Market",
+    "meetups_clubs": "Racing / Competition",
+}
+
+
+# A trailing "(Grandstand)" / "(Infield)" etc. is a seating SECTION, not a different
+# show — the Fairgrounds API lists the same concert once per section. Strip it so the
+# duplicates collapse to one clean listing ("Chicago (Grandstand)" -> "Chicago").
+_FG_SECTION_SUFFIX = re.compile(
+    r"\s*\((?:grandstand|infield|clubhouse|paddock|surfside race place|"
+    r"arena|pavilion|lawn|seating|stage|ga|vip)[^)]*\)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _strip_section(name: str) -> str:
+    return _FG_SECTION_SUFFIX.sub("", name).strip()
+
+
+def _range_start(time_str: str) -> str:
+    """'8:00 PM - 11:00 PM' -> '8 PM'; '' -> ''. Normalizes via _fmt_time when parseable."""
+    head = (time_str or "").split(" - ")[0].strip()
+    if not head:
+        return ""
+    try:
+        return _fmt_time(datetime.strptime(head, "%I:%M %p"))
+    except ValueError:
+        return head
+
+
+def scrape_fairgrounds_music() -> list[dict]:
+    """Del Mar Fairgrounds + The Sound — reuse the live-API scraper in scrape_events.py.
+
+    The Sound is a Belly-Up-booked concert room AT the Fairgrounds; it is kept as a
+    distinct venue (never collapsed into the Fairgrounds bucket). Concerts surface as
+    live music; the Fairgrounds' non-music slate (County Fair, expos, racing) still
+    surfaces per the operator's standing "always show the Fairgrounds" directive, with
+    its category spelled out in the description.
+
+    CRITICAL source: a weekly run that returns zero here warns rather than passing
+    silently (see CRITICAL_SOURCES) — the Fairgrounds is half a mile away.
+    """
+    try:
+        from scrape_events import scrape_fairgrounds
+    except Exception as e:  # noqa: BLE001
+        print(f"[FAIRGROUNDS] import failed: {e}")
+        return []
+
+    # Dedupe same-show section re-listings within the source, preferring an entry
+    # that carries a real start time over a time-less one.
+    best: dict[tuple, dict] = {}
+    for ev in scrape_fairgrounds():
+        d = ev.get("date", "")
+        try:
+            dd = date.fromisoformat(d)
+        except ValueError:
+            continue
+        if not _within_window(dd):
+            continue
+        venue = _clean(ev.get("venue", "Del Mar Fairgrounds"))
+        artist = _strip_section(_clean(ev.get("title", "")))
+        desc = "Concert" if venue == "The Sound" else _FAIRGROUNDS_CATEGORY_DESC.get(
+            ev.get("category", ""), "Event")
+        start = _range_start(ev.get("time", ""))
+        normalized = _event(
+            venue=venue, stream=None, city="Del Mar", area="Del Mar",
+            date=d, day=dd.strftime("%A"), start=start,
+            artist=artist, genre="", description=desc,
+            source="delmarfairgrounds.com",
+            source_url=ev.get("source") or "https://www.delmarfairgrounds.com/events",
+            tier=1, confidence="high",
+        )
+        key = (venue, d, artist.lower())
+        cur = best.get(key)
+        if cur is None or (not cur.get("start") and start):
+            best[key] = normalized
+    return list(best.values())
+
+
 # ─── Tier-3: manual overlay (operator embellishment) ─────────────────────────
 
 def load_manual_overlay() -> list[dict]:
@@ -308,8 +397,15 @@ SOURCES = [
     ("Pour House (Oceanside)", scrape_pour_house),
     ("The Kraken (Cardiff)", scrape_kraken),
     ("Belly Up (Solana Beach)", scrape_belly_up_music),
+    ("Del Mar Fairgrounds / The Sound", scrape_fairgrounds_music),
     ("Manual overlay", load_manual_overlay),
 ]
+
+# Sources whose silence is suspicious, not normal: a weekly run that scrapes ZERO
+# events (or errors) from one of these raises a loud warning rather than passing
+# quietly. The Fairgrounds is half a mile from home and runs something most weeks,
+# so an empty result almost always means the feed broke — not a quiet week.
+CRITICAL_SOURCES = {"Del Mar Fairgrounds / The Sound"}
 
 
 def _dedupe(events: list[dict]) -> list[dict]:
@@ -339,6 +435,19 @@ def scrape_all_music(verbose: bool = True) -> tuple[list[dict], dict]:
             report[label] = f"ERROR: {e}"
             if verbose:
                 print(f"  [ERR] {label}: {e}")
+
+    # Critical sources: zero events or an error means the feed likely broke. Surface
+    # it loudly so a silent failure can't masquerade as "quiet week" (report["_warnings"]).
+    warnings = []
+    for label in CRITICAL_SOURCES:
+        val = report.get(label)
+        if val == 0:
+            warnings.append(f"CRITICAL source '{label}' returned 0 events — feed may be down.")
+        elif isinstance(val, str) and val.startswith("ERROR"):
+            warnings.append(f"CRITICAL source '{label}' errored: {val}")
+    if warnings:
+        report["_warnings"] = warnings
+
     deduped = _dedupe(all_events)
     deduped.sort(key=lambda e: (e["date"], e.get("start", "")))
     if verbose:
@@ -346,6 +455,8 @@ def scrape_all_music(verbose: bool = True) -> tuple[list[dict], dict]:
         print(f"  -> {len(deduped)} unique events ({len(all_events)} before dedupe)")
         if dry:
             print(f"  -> DRY sources (0 events): {', '.join(dry)}")
+        for w in warnings:
+            print(f"  [WARN] {w}")
     return deduped, report
 
 
