@@ -52,7 +52,7 @@ npm install && npm start   # Expo Go
 ### Music pipeline (Python — `scripts/`) — CURRENT
 | File | Purpose |
 |------|---------|
-| `scripts/scrape_music.py` | **Live-music scrapers** (Del Mar → Oceanside). One fn per source → normalized dicts with `tier`/`confidence`/`marker`. `scrape_all_music()` orchestrates with per-source try/except + dedupe. Loads `data/music_manual.json` overlay. |
+| `scripts/scrape_music.py` | **Live-music scrapers** (Del Mar → Oceanside). One fn per source → normalized dicts with `tier`/`confidence`/`marker`. `scrape_all_music()` orchestrates with per-source try/except + dedupe. Includes `scrape_fairgrounds_music()` (reuses `scrape_events.scrape_fairgrounds`; Fairgrounds + The Sound). `CRITICAL_SOURCES` flags feeds whose silence is a failure → `report["_warnings"]`. Loads `data/music_manual.json` overlay. |
 | `scripts/weekly_music.py` | `build_weekly_music()` writes `data/weekly_music.json` (+ dated backups in `data/weekly_music_backups/`); `load_weekly_music()` with staleness flag; `build_reminders()` from `daily_social_plan.VENUES`. |
 | `scripts/format_music_email.py` | `format_music_email()` (music-first → REMINDERS → legend) + `format_music_sms()` (condensed). |
 | `scripts/notify.py` | Actions: **`weekly`** (refresh cache), **`reminder`** (daily email+SMS) — plus legacy `morning/gotime/log`. Email = Gmail SMTP; SMS = Verizon MMS gateway. |
@@ -105,11 +105,13 @@ Confirmed **Tier-1** (✅ scraped directly, server-rendered/JSON, verified June 
 | **Belly Up** | Solana Beach | reuse `scrape_events.scrape_belly_up` (display-field) | Touring acts. **Times default to 8 PM (approximate).** |
 | **Pour House** | Oceanside | Squarespace `?format=json` `upcoming[]` | `startDate` is ms-epoch **UTC** → convert to PT. |
 | **The Kraken** | Cardiff | Tribe REST API | Whole calendar tagged `Music`; filter noise by title (`_NON_MUSIC`). |
+| **Del Mar Fairgrounds** + **The Sound** | Del Mar | reuse `scrape_events.scrape_fairgrounds` (live JSON API `delmarfairgrounds.com/api/events` + hardcoded fair/concert/racing supplement) | **CRITICAL source** (in `CRITICAL_SOURCES` — zero events ⇒ `report["_warnings"]` + loud `[WARN]`). The Fairgrounds is a SEPARATE venue from Del Mar Plaza (Plaza only cross-promotes the County Fair). **The Sound** (Belly-Up-booked concert room AT the Fairgrounds) is kept as its own venue, never collapsed in. Non-music slate (County Fair, expos, racing) still surfaces per the standing "always show the Fairgrounds" directive, with category in the description. Memory: *Del Mar Fairgrounds + The Sound visibility*. |
 
 **Tier-2/3 gaps (NOT auto-scraped — operator embellishes via `music_manual.json`):**
-The Sound (JS + Ticketmaster), Coyote Bar & Grill Carlsbad (DNS/cert issues),
-The Roxy Encinitas (JS), Oceanside Pier Amphitheatre / Del Mar Fairgrounds
-(Ticketmaster — need API key), Belching Beaver (no event page). Carlsbad has no
+Coyote Bar & Grill Carlsbad (DNS/cert issues), The Roxy Encinitas (JS),
+Oceanside Pier Amphitheatre (Ticketmaster — need API key), Belching Beaver (no
+event page). *(Del Mar Fairgrounds + The Sound are now auto-scraped via the
+Fairgrounds JSON API — see the Tier-1 table above.)* Carlsbad has no
 scrapeable in-city touring room; the big acts come through Belly Up / The Sound.
 
 ## Scoring Quick Reference
@@ -167,8 +169,10 @@ MON 7:00 AM: notify.py weekly → weekly_music.build_weekly_music()
       → Pour House (Squarespace)  → Oceanside live music
       → The Kraken (Tribe API)    → Cardiff bands
       → Belly Up (legacy scraper) → Solana Beach touring acts
+      → Fairgrounds JSON API      → Del Mar Fairgrounds + The Sound (CRITICAL: 0 ⇒ warn)
       → data/music_manual.json    → operator overlay (⚠ until verified)
       → dedupe + sort by (date, time)
+      → CRITICAL_SOURCES check    → report["_warnings"] if a critical feed is empty/errored
   → back up previous weekly_music.json → weekly_music_backups/
   → write data/weekly_music.json {week_of, generated_at, events, reminders, source_report}
 

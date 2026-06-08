@@ -156,6 +156,8 @@ def weekly(dry_run: bool = False):
     week = build_weekly_music(verbose=True)
     n = len(week.get("events", []))
     print(f"[WEEKLY] refreshed — {n} events for week of {week.get('week_of')}")
+    for w in week.get("source_report", {}).get("_warnings", []):
+        print(f"[WEEKLY][WARN] {w}")
 
 
 def reminder(dry_run: bool = False):
