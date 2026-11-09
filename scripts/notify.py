@@ -33,6 +33,7 @@ from daily_social_plan import (
     generate_plan, generate_weekly_plan,
 )
 from weekly_music import build_weekly_music, load_weekly_music
+from ai_music import pick_this_week, refresh_big_shows
 from format_music_email import format_music_email, format_music_sms
 
 
@@ -158,18 +159,41 @@ def weekly(dry_run: bool = False):
     print(f"[WEEKLY] refreshed — {n} events for week of {week.get('week_of')}")
     for w in week.get("source_report", {}).get("_warnings", []):
         print(f"[WEEKLY][WARN] {w}")
+    try:
+        refresh_big_shows(force=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"[WEEKLY] big-shows refresh failed: {e}")
 
 
 def reminder(dry_run: bool = False):
-    """Daily late-afternoon reminder — email + SMS of THIS week's live music (cached)."""
-    week = load_weekly_music()
-    if week is None:
-        # No cache yet — build it now so the operator still gets something accurate.
-        print("[REMINDER] no weekly cache found — building it now")
-        week = build_weekly_music(verbose=True)
+    """Daily late-afternoon reminder — email + SMS of the next week's live music.
 
-    email_body = format_music_email(week)
-    sms_body = format_music_sms(week)
+    Local lineups change day to day, so the week is re-scraped fresh before every send
+    (the cache is the fallback if the scrape comes back empty). The AI layer adds this
+    week's picks and the big-shows list; any AI failure just leaves those sections out.
+    """
+    cached = load_weekly_music()
+    try:
+        week = build_weekly_music(verbose=True)
+        if not week.get("events") and cached and cached.get("events"):
+            print("[REMINDER] fresh scrape found nothing — sending the cached lineup")
+            week = cached
+    except Exception as e:  # noqa: BLE001 — a failed scrape must not stop the send
+        print(f"[REMINDER] fresh scrape failed ({e}) — sending the cached lineup")
+        week = cached
+    if week is None:
+        print("[REMINDER] no lineup at all — nothing to send")
+        return
+
+    picks, big = [], None
+    try:
+        picks = pick_this_week(week.get("events", []))
+        big = refresh_big_shows()
+    except Exception as e:  # noqa: BLE001
+        print(f"[REMINDER] AI layer failed: {e}")
+
+    email_body = format_music_email(week, picks=picks, big=big)
+    sms_body = format_music_sms(week, picks=picks, big=big)
 
     subject = "🎵 This week's live music — Del Mar to Oceanside"
     if week.get("_stale"):

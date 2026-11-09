@@ -228,23 +228,6 @@ def probe_url(url: str, expected_format: str = "html") -> dict:
 
 def llm_discover(city: str, state: str) -> list[dict]:
     """Ask Claude Haiku to suggest event sources for a city."""
-    # Try to load API key from spy_timing config
-    api_key = None
-    try:
-        config_path = Path(__file__).resolve().parent.parent.parent / "spy_timing" / "config.py"
-        if config_path.exists():
-            # Read ANTHROPIC_API_KEY if it exists, otherwise skip
-            pass
-    except Exception:
-        pass
-
-    # Try environment variable
-    import os
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("[LLM] No ANTHROPIC_API_KEY set — skipping LLM discovery")
-        return []
-
     prompt = f"""You are helping a local social events app find event sources for a specific US city.
 For {city}, {state}, suggest up to 10 specific websites or pages that list local events.
 
@@ -267,25 +250,11 @@ For each, return:
 Return ONLY a raw JSON array. No markdown, no prose."""
 
     try:
-        data = json.dumps({
-            "model": "claude-haiku-4-5-20251001",
-            "max_tokens": 2048,
-            "messages": [{"role": "user", "content": prompt}],
-        }).encode()
-
-        req = urllib.request.Request(
-            "https://api.anthropic.com/v1/messages",
-            data=data,
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read().decode())
-
-        text = result.get("content", [{}])[0].get("text", "")
+        # Claude Code subscription, never API credit (claude_cli.py).
+        from claude_cli import ask_claude
+        text = ask_claude(prompt)
+        if text is None:
+            return []
         match = re.search(r'\[[\s\S]*\]', text)
         if not match:
             return []

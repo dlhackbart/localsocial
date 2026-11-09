@@ -2,8 +2,10 @@
 Local Social — format the weekly live-music reminder.
 
 Layout (operator spec):
+  0. PICKS FOR YOU         — the AI's few picks this week (ai_music.py), when available.
   1. LIVE MUSIC THIS WEEK  — music first, chronological by day, Del Mar -> Oceanside,
      each line tagged with a confidence marker (✅ / ~ / ⚠).
+  1b. BIG SHOWS            — bigger concerts ~4 months out, just-announced first.
   2. REMINDERS             — the usual everyday spots, grouped by area.
   3. Source key            — what each marker means.
 
@@ -49,9 +51,72 @@ def _group_by_day(events: list[dict]) -> dict[str, list[dict]]:
     return days
 
 
-def format_music_email(week: dict) -> str:
+def _short_date(iso: str) -> str:
+    d = datetime.strptime(iso, "%Y-%m-%d")
+    return f"{d.strftime('%a')} {d.strftime('%b')} {d.day}"
+
+
+def _picks_section(picks: list[dict]) -> list[str]:
+    """⭐ the AI's few picks for this week, each with its reason."""
+    if not picks:
+        return []
+    lines = ["⭐ PICKS FOR YOU THIS WEEK"]
+    for p in picks:
+        ev = p["event"]
+        lines.append(f"  {_short_date(ev['date'])} {ev.get('start', '')} — "
+                     f"{_trim(ev.get('artist', ''), 48)} @ {ev['venue']} ({ev['city']})")
+        if p.get("why"):
+            lines.append(f"      {p['why']}")
+    lines.append(RULE2)
+    return lines
+
+
+def _big_line(s: dict) -> list[str]:
+    head = f"  {s.get('marker', '~')} {_short_date(s['date'])} — {_trim(s['artist'], 48)} @ {s['venue']}"
+    if s.get("city") and s["city"] not in s["venue"]:
+        head += f" ({s['city']})"
+    out = [head]
+    detail = s.get("why", "")
+    if s.get("on_sale"):
+        detail = (detail + " · " if detail else "") + f"on sale {s['on_sale']}"
+    if detail:
+        out.append(f"      {detail}")
+    if s.get("url"):
+        out.append(f"      {s['url']}")
+    return out
+
+
+def _big_shows_section(big: dict | None) -> list[str]:
+    """🎟 bigger shows up to ~4 months out — just-announced first, then by date."""
+    from ai_music import is_new
+    shows = (big or {}).get("shows") or []
+    if not shows:
+        return []
+    months = round((big.get("horizon_days") or 120) / 30)
+    lines = ["", RULE, f"🎟 BIG SHOWS — GET TICKETS EARLY (next {months} months)"]
+    new = [s for s in shows if is_new(s)]
+    rest = [s for s in shows if not is_new(s)]
+    if new:
+        lines.append("")
+        lines.append("JUST ANNOUNCED")
+        for s in new:
+            lines.extend(_big_line(s))
+    if rest:
+        lines.append("")
+        lines.append("COMING UP" if new else "ON THE CALENDAR")
+        for s in rest:
+            lines.extend(_big_line(s))
+    gen = (big.get("generated_at") or "")[:10]
+    if gen:
+        lines.append(f"  (list checked {gen})")
+    return lines
+
+
+def format_music_email(week: dict, picks: list[dict] | None = None,
+                       big: dict | None = None) -> str:
     events = week.get("events", [])
     lines: list[str] = []
+    lines.extend(_picks_section(picks or []))
     lines.append("🎵 LIVE MUSIC THIS WEEK — Del Mar → Oceanside")
 
     week_of = week.get("week_of", "")
@@ -78,6 +143,8 @@ def format_music_email(week: dict) -> str:
             lines.append("")
             lines.append(_day_header(iso))
             lines.extend(_music_line(ev) for ev in evs)
+
+    lines.extend(_big_shows_section(big))
 
     # ── Reminders ──
     reminders = week.get("reminders", [])
@@ -107,10 +174,19 @@ def format_music_email(week: dict) -> str:
     return "\n".join(lines)
 
 
-def format_music_sms(week: dict) -> str:
+def format_music_sms(week: dict, picks: list[dict] | None = None,
+                     big: dict | None = None) -> str:
     """Condensed music-only view for the daily text (no reminders/legend)."""
+    from ai_music import is_new
     events = week.get("events", [])
-    lines = ["🎵 Live music this week (Del Mar→Oceanside):"]
+    lines = []
+    for p in (picks or [])[:2]:
+        ev = p["event"]
+        lines.append(f"⭐ {_trim(ev['artist'], 28)} @ {ev['venue'].split(' · ')[0]} "
+                     f"{datetime.strptime(ev['date'], '%Y-%m-%d').strftime('%a')} {ev.get('start', '')}")
+    for s in [s for s in (big or {}).get("shows") or [] if is_new(s)][:2]:
+        lines.append(f"🎟 New: {_trim(s['artist'], 28)} @ {s['venue']} {_short_date(s['date'])}")
+    lines.append("🎵 Live music this week (Del Mar→Oceanside):")
     if week.get("_stale"):
         lines.append(f"⚠ lineup {week.get('_age_days','?')}d old — verify")
     if not events:

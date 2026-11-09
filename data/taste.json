@@ -1,0 +1,26 @@
+{
+  "_note": "What the AI picks for. Edit freely; the next run uses it. Set 2026-11-09 by the operator.",
+  "home": "Del Mar, CA",
+  "likes": [
+    "reggae / surf / beach",
+    "blues / soul / funk",
+    "country / Americana / folk",
+    "rock / classic rock"
+  ],
+  "big_show_venues": [
+    "Belly Up (Solana Beach)",
+    "The Sound (Del Mar Fairgrounds)",
+    "Del Mar Fairgrounds",
+    "Frontwave Arena (Oceanside)",
+    "The Rady Shell at Jacobs Park (San Diego)",
+    "Humphreys Concerts by the Bay (San Diego)",
+    "North Island Credit Union Amphitheatre / Cal Coast (Chula Vista)",
+    "Pechanga Arena (San Diego)",
+    "Viejas Arena (San Diego)",
+    "The Observatory North Park (San Diego)",
+    "Music Box (San Diego)",
+    "Petco Park concerts (San Diego)",
+    "Pala Casino / Harrah's Resort SoCal / Pechanga Resort (North County inland)"
+  ],
+  "big_show_days": 120
+}

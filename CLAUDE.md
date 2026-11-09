@@ -17,8 +17,25 @@ Local live-music + venue system for the San Diego North County coast. Two parts:
 
 ## Current Product — weekly live-music reminder
 
-**Cadence:** scrape ONCE on Monday → cache `data/weekly_music.json` → read & send
-that cache daily. The lineup only changes weekly; the daily send is a reminder.
+**Cadence (since 2026-11-09):** the 4 PM reminder **re-scrapes the next week fresh
+before every send** (operator: *"the local should be the latest so it's accurate"*);
+`data/weekly_music.json` is the fallback if a scrape comes back empty. Monday's
+`weekly` run still rebuilds it and force-refreshes the big-shows list.
+
+**AI layer (`scripts/ai_music.py`, 2026-11-09) — Claude Code SUBSCRIPTION ONLY, never
+API credit** (`scripts/claude_cli.py` strips `ANTHROPIC_API_KEY` and runs `claude -p`;
+the operator approves every use of API credit). Driven by `data/taste.json` (likes:
+reggae/surf, blues/soul/funk, country/Americana/folk, rock/classic rock; big-show venues;
+120-day horizon) — edit that file to change what it picks.
+- **⭐ Picks for you** — Claude picks ≤5 of this week's scraped shows **by index**, so it
+  cannot invent one. Top of the email; 2 in the SMS.
+- **🎟 Big shows — get tickets early** — `data/big_shows.json`, refreshed when ≥3 days
+  old (and every Monday). Belly Up / The Sound / Fairgrounds scraped directly with a long
+  lookahead (✅; Sound/Fairgrounds concerts always kept), plus a Claude **web-search
+  scout** of the big San Diego rooms — **a scouted show is dropped unless its URL's page
+  names the artist** (kept as `~`). Claude then ranks for taste. `first_seen` drives a
+  **JUST ANNOUNCED** block (first week); the first-ever run marks nothing new.
+- Any AI failure leaves those sections out; the plain lineup always sends.
 
 ```bash
 python scripts/scrape_music.py                 # Probe all music sources, print summary
@@ -54,7 +71,9 @@ npm install && npm start   # Expo Go
 |------|---------|
 | `scripts/scrape_music.py` | **Live-music scrapers** (Del Mar → Oceanside). One fn per source → normalized dicts with `tier`/`confidence`/`marker`. `scrape_all_music()` orchestrates with per-source try/except + dedupe. Includes `scrape_fairgrounds_music()` (reuses `scrape_events.scrape_fairgrounds`; Fairgrounds + The Sound). `CRITICAL_SOURCES` flags feeds whose silence is a failure → `report["_warnings"]`. Loads `data/music_manual.json` overlay. |
 | `scripts/weekly_music.py` | `build_weekly_music()` writes `data/weekly_music.json` (+ dated backups in `data/weekly_music_backups/`); `load_weekly_music()` with staleness flag; `build_reminders()` from `daily_social_plan.VENUES`. |
-| `scripts/format_music_email.py` | `format_music_email()` (music-first → REMINDERS → legend) + `format_music_sms()` (condensed). |
+| `scripts/format_music_email.py` | `format_music_email()` (picks → music-first → big shows → REMINDERS → legend) + `format_music_sms()` (condensed). |
+| `scripts/ai_music.py` | `pick_this_week()`, `refresh_big_shows()`, `load_big_shows()`, `is_new()` — see "AI layer" above. `python scripts/ai_music.py --force` rebuilds the big-shows list. |
+| `scripts/claude_cli.py` | `ask_claude()` / `ask_claude_json()` — `claude -p` on the subscription, API key stripped, tools denied unless named. Also used by `scrape_events.py`, `discover_venues.py`, `discover_city.py`. |
 | `scripts/notify.py` | Actions: **`weekly`** (refresh cache), **`reminder`** (daily email+SMS) — plus legacy `morning/gotime/log`. Email = Gmail SMTP; SMS = Verizon MMS gateway. |
 | `scripts/notify_config.py` | SMTP credentials — imports from `spy_timing/config.py` |
 | `scripts/run_notify_reminder.bat` / `run_weekly_music.bat` | Scheduled-task launchers for the new pipeline (weekly batch logs to its OWN `weekly_music.log`, NOT the legacy `scrape.log`). |

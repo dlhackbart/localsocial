@@ -27,6 +27,9 @@ data/venue_schedules.json
 data/weekly_music.json
 data/weekly_music_backups/
 
+# Big-shows list (rebuilt by ai_music.py; regenerated, not source)
+data/big_shows.json
+
 # Local scheduled-task XML backups (machine-specific)
 scripts/task_backups_*/
 

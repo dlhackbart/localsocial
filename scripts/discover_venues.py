@@ -35,8 +35,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import venue_registry
 
 TARGET_AREAS = ["Del Mar", "Solana Beach", "Encinitas", "Carlsbad"]
-MODEL = "claude-haiku-4-5-20251001"
-ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages"
+# Claude runs on the Code subscription, never API credit (claude_cli.py).
+from claude_cli import ask_claude  # noqa: E402
 
 
 def _now_iso() -> str:
@@ -45,23 +45,6 @@ def _now_iso() -> str:
 
 def _today() -> str:
     return datetime.now().date().isoformat()
-
-
-def _load_api_key() -> str | None:
-    """Look for ANTHROPIC_API_KEY in env or spy_timing/config.py."""
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if key:
-        return key
-    config_path = PROJECT_ROOT.parent / "spy_timing" / "config.py"
-    if config_path.exists():
-        try:
-            text = config_path.read_text()
-            m = re.search(r"ANTHROPIC_API_KEY\s*=\s*['\"]([^'\"]+)['\"]", text)
-            if m:
-                return m.group(1)
-        except Exception:
-            pass
-    return None
 
 
 def load_candidates() -> dict:
@@ -85,11 +68,6 @@ def ask_llm_for_venues(area: str, known_names: list[str]) -> list[dict]:
 
     Returns list of {name, url, area, category, why}.
     """
-    api_key = _load_api_key()
-    if not api_key:
-        print(f"[LLM] no ANTHROPIC_API_KEY — skipping {area}")
-        return []
-
     known_str = ", ".join(known_names) if known_names else "(none yet)"
     prompt = f"""Suggest up to 10 bars, restaurants, or live-music venues in {area}, CA (San Diego North County coast) that have:
   - An active public website (not just a Google Maps listing)
@@ -108,23 +86,9 @@ For each, return a JSON object:
 Return ONLY a raw JSON array. No markdown, no prose."""
 
     try:
-        body = json.dumps({
-            "model": MODEL,
-            "max_tokens": 2048,
-            "messages": [{"role": "user", "content": prompt}],
-        }).encode()
-        req = urllib.request.Request(
-            ANTHROPIC_ENDPOINT,
-            data=body,
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read().decode())
-        text = result.get("content", [{}])[0].get("text", "")
+        text = ask_claude(prompt)
+        if text is None:
+            return []
         match = re.search(r"\[[\s\S]*\]", text)
         if not match:
             return []

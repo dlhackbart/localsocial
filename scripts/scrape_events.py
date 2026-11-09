@@ -900,43 +900,13 @@ def _extract_schedule_from_text(text: str) -> list[dict]:
 #
 # Regex catches clean day-token patterns ("Monday 7 PM") but misses marketing
 # prose ("every Friday night," "weeknights 3-6"). Claude Haiku handles the
-# prose cases. If the API call fails (no key, network, parse error), we fall
+# prose cases. If the call fails (no CLI, timeout, parse error), we fall
 # back to the regex extractor so the scraper never breaks.
 
-_ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages"
-_LLM_MODEL = "claude-haiku-4-5-20251001"
-_LLM_TEXT_CAP = 8000  # chars of page text per call (keeps cost < $0.001/venue)
+# Runs on the Claude Code subscription, never API credit (claude_cli.py).
+from claude_cli import ask_claude  # noqa: E402
 
-
-def _load_anthropic_key() -> str | None:
-    """ANTHROPIC_API_KEY from env first, then spy_timing/config.py."""
-    import os
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if key:
-        return key
-    config_path = PROJECT_ROOT.parent / "spy_timing" / "config.py"
-    if config_path.exists():
-        try:
-            text = config_path.read_text()
-            m = re.search(r"ANTHROPIC_API_KEY\s*=\s*['\"]([^'\"]+)['\"]", text)
-            if m:
-                return m.group(1)
-        except Exception:
-            pass
-    return None
-
-
-# Cache the key check so we don't re-read spy_timing/config.py on every URL
-_anthropic_key_cache: str | None = None
-_anthropic_key_loaded = False
-
-
-def _anthropic_key() -> str | None:
-    global _anthropic_key_cache, _anthropic_key_loaded
-    if not _anthropic_key_loaded:
-        _anthropic_key_cache = _load_anthropic_key()
-        _anthropic_key_loaded = True
-    return _anthropic_key_cache
+_LLM_TEXT_CAP = 8000  # chars of page text per call
 
 
 _VALID_DAYS = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
@@ -1048,8 +1018,7 @@ def _llm_extract_schedule(text: str, venue_name: str) -> list[dict] | None:
     call failed (network, bad JSON, missing key). Caller should fall back to
     regex extraction on None.
     """
-    api_key = _anthropic_key()
-    if not api_key or not text.strip():
+    if not text.strip():
         return None
 
     trimmed = text[:_LLM_TEXT_CAP]
@@ -1075,23 +1044,9 @@ Rules — READ CAREFULLY:
 --- END ---"""
 
     try:
-        body = json.dumps({
-            "model": _LLM_MODEL,
-            "max_tokens": 1024,
-            "messages": [{"role": "user", "content": prompt}],
-        }).encode()
-        req = urllib.request.Request(
-            _ANTHROPIC_ENDPOINT,
-            data=body,
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read().decode())
-        text_out = result.get("content", [{}])[0].get("text", "")
+        text_out = ask_claude(prompt)
+        if text_out is None:
+            return None
         match = re.search(r"\[[\s\S]*\]", text_out)
         if not match:
             return []
